@@ -4,20 +4,25 @@ SourceSpec(kind="sparql", target=<key>) selects a query from QUERIES.
 Reference points:
   Q15632617 = humain fictif (fictional human)
   Q150      = français (French)
+  Q7725634  = œuvre littéraire (literary work; les romans y sont typés
+              directement, pas comme "roman" — Q8261 — en pratique)
   P1441     = présent dans l'œuvre (present in work)
-  P407      = langue de l'œuvre (language of work or name)
+  P407      = langue de l'œuvre (pour un livre ≈ langue du texte original)
   P50       = auteur (author)
 """
 
 QUERIES: dict[str, str] = {
-    # Angle a — large : tout humain fictif présent dans une œuvre de langue
-    # française. Bruité par conception (œuvres étrangères documentées en
-    # français incluses) ; le tri fin appartient à la phase normalize.
+    # Angle a — fiction d'expression française : tout humain fictif présent
+    # dans une œuvre LITTÉRAIRE (P31/P279* Q7725634, inclut romans, théâtre,
+    # BD franco-belge) de langue française (P407). P407 + forme littéraire
+    # exclut l'audiovisuel, les jeux et les mangas traduits ; P364/P495 ont
+    # été écartés : ils ne sont pas renseignés sur les livres.
     "french_fictional_humans": """\
 SELECT ?item ?work ?itemLabel ?workLabel WHERE {
   ?item wdt:P31 wd:Q15632617 ;
         wdt:P1441 ?work .
-  ?work wdt:P407 wd:Q150 .
+  ?work wdt:P407 wd:Q150 ;
+        wdt:P31/wdt:P279* wd:Q7725634 .
   SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en". }
 }
 """,
