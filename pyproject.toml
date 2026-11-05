@@ -1,0 +1,20 @@
+[project]
+name = "onomatron"
+version = "0.1.0"
+description = "Character-level generation of French literature character names, makemore-style, up to a from-scratch decoder-only transformer in PyTorch"
+readme = "README.md"
+authors = [
+    { name = "Vincent Le Meur", email = "vincent.lemeur@protonmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ty.src]
+include = ["onomatron", "tests"]
