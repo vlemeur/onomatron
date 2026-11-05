@@ -14,6 +14,13 @@ dependencies = [
     "tenacity>=9.2.1",
 ]
 
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+
 [tool.ruff]
 target-version = "py314"
 line-length = 88
@@ -27,7 +34,6 @@ include = ["onomatron", "tests"]
 [dependency-groups]
 dev = [
     "jupyter>=1.1.1",
-    "lab>=8.10",
     "prek>=0.5.10",
     "ruff>=0.17.3",
     "ty>=0.0.97",
