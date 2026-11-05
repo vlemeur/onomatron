@@ -26,6 +26,8 @@ include = ["onomatron", "tests"]
 
 [dependency-groups]
 dev = [
+    "jupyter>=1.1.1",
+    "lab>=8.10",
     "prek>=0.5.10",
     "ruff>=0.17.3",
     "ty>=0.0.97",
