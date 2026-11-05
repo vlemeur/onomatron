@@ -18,3 +18,10 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.ty.src]
 include = ["onomatron", "tests"]
+
+[dependency-groups]
+dev = [
+    "prek>=0.5.10",
+    "ruff>=0.17.3",
+    "ty>=0.0.97",
+]
