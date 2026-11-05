@@ -69,7 +69,7 @@ class WikipediaClient:
             data = self._get_json(params)
             for member in data["query"]["categorymembers"]:
                 title = member["title"]
-                if member["type"] == "subcat":
+                if member.get("type") == "subcat" or member.get("ns") == 14:
                     subcats.append(title.removeprefix("Catégorie:"))
                 else:
                     pages.append(title)

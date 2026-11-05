@@ -16,7 +16,8 @@ class CharacterName(BaseModel):
 class SourceSpec(BaseModel):
     """A scrape target. Adding a new author/era = adding a line here."""
 
-    name: str  # stable identifier, used in file names
-    kind: str = Field(pattern="^(list_page|category)$")
-    target: str  # page title or category name (without "Catégorie:" prefix)
+    name: str
+    kind: str = Field(pattern="^(list_page|category|work_page)$")
+    target: str
+    section: str | None = None  # work_page only: heading to target
     author: str | None = None

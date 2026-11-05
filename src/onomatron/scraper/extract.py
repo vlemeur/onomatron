@@ -3,6 +3,8 @@
 import logging
 import re
 
+import mwparserfromhell as mw
+
 from onomatron.scraper.models import CharacterName
 
 logger = logging.getLogger(__name__)
@@ -10,44 +12,210 @@ logger = logging.getLogger(__name__)
 # Internal links: [[Title]] or [[Title|display]] (ignores fragments #section)
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]")
 
-# Multi-word proper noun sequences, possibly with lowercase particles
-# ("de", "d'", "du", "la", "le") — crude by design, refined in normalize.
+# Everything after these headings is bibliography or references — links there
+# are scholars, publishers and translations, not characters. ("Voir aussi" is
+# deliberately absent: some list pages place it before the character lists.)
+TAIL_SECTIONS_RE = re.compile(
+    r"^\s*={2,}\s*(?:Notes et r[ée]f[ée]rences|R[ée]f[ée]rences|"
+    r"Bibliographie|Liens externes|Articles connexes)\s*={2,}",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# Proper noun sequences (1-4 words), possibly with lowercase particles
+# (de, de la, d', du, des, van) — crude by design, refined in normalize.
+# Single words are accepted: character page titles and list lines inside
+# work sections contain many one-word names (Vautrin, Albéric, Cosette).
 NAME_RE = re.compile(
     r"^[A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûçüÉÈÀÂÎÔÛÇ\-]+"
-    r"(?:\s+(?:de\s+|d'|du\s+|des\s+)?[A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûçüÉÈÀÂÎÔÛÇ\-]+)+$"
+    r"(?:\s+(?:de\s+la\s+|de\s+|d'|du\s+|des\s+|van\s+)?[A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûçüÉÈÀÂÎÔÛÇ\-]+)*$"
 )
+# Stricter variant for list pages: they link far beyond characters (places,
+# people, concepts), and one-word links there are almost never names
+# (Damas, Graz, Caen, Russie) — require at least two words.
+NAME_MULTI_RE = re.compile(
+    r"^[A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûçüÉÈÀÂÎÔÛÇ\-]+"
+    r"(?:\s+(?:de\s+la\s+|de\s+|d'|du\s+|des\s+|van\s+)?[A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûçüÉÈÀÂÎÔÛÇ\-]+)+$"
+)
+# Leading name at the start of a list line: 1-4 capitalized words,
+# optionally with French particles ("de", "d'", "du", "des").
+NAME_PREFIX_RE = re.compile(
+    r"^[A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûçüÉÈÀÂÎÔÛÇ\-]+"
+    r"(?:\s+(?:de\s+|d'|du\s+|des\s+)?[A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûçüÉÈÀÂÎÔÛÇ\-]+){0,3}"
+)
+
 
 # Titles of works (Le Père Goriot), categories, etc. link a lot from lists.
 WORK_HINTS = ("Le ", "La ", "Les ", "L'", "Un ", "Une ", "Du ", "Des ")
+
+# Determiners/pronouns that survive the pattern matches as bare words at the
+# start of a line or title — they are never character names.
+NON_NAME_WORDS = {
+    "Acteurs",
+    "Auteur",
+    "Autres",
+    "Ceci",
+    "Ce",
+    "Cette",
+    "Ces",
+    "Dernière",
+    "Dernier",
+    "De",
+    "Dans",
+    "Des",
+    "Du",
+    "Elle",
+    "En",
+    "Entre",
+    "Famille",
+    "Fourmis",
+    "Humains",
+    "Il",
+    "Ils",
+    "La",
+    "Le",
+    "Les",
+    "Leur",
+    "Leurs",
+    "Liste",
+    "Madame",
+    "Monsieur",
+    "Non",
+    "Note",
+    "Notes",
+    "Nous",
+    "On",
+    "Parmi",
+    "Personnage",
+    "Personnages",
+    "Présentation",
+    "Première",
+    "Premier",
+    "Principaux",
+    "Résumé",
+    "Sa",
+    "Sans",
+    "Section",
+    "Ses",
+    "Synopsis",
+    "Son",
+    "Sources",
+    "Tout",
+    "Tous",
+    "Un",
+    "Une",
+    "Vous",
+}
+
+# Names starting with these are meta-designations (Famille X, Personnages de X),
+# not character names.
+NON_NAME_PREFIXES = ("Famille ", "Liste ", "Personnages de ", "Types de ")
+
+
+def _is_plausible_name(canonical: str) -> bool:
+    """Filter surviving pattern matches that are clearly not names."""
+    if canonical in NON_NAME_WORDS:
+        return False
+    return not canonical.startswith(NON_NAME_PREFIXES)
 
 
 def extract_from_list_page(wikitext: str, source: str) -> list[CharacterName]:
     """Extract character names from a "List of characters" page.
 
     Strategy: the internal links' *titles* are canonical name forms.
-    A first pass filters obvious non-names (works, single words).
+    Disambiguation suffixes ("Vautrin (personnage de Balzac)") are stripped
+    before filtering; bibliography and navigation sections are ignored;
+    a first pass rejects obvious non-names (works, meta).
     """
+    tail = TAIL_SECTIONS_RE.search(wikitext)
+    if tail:
+        wikitext = wikitext[: tail.start()]
     titles = [t.strip() for t in WIKILINK_RE.findall(wikitext)]
     seen: set[str] = set()
     names: list[CharacterName] = []
     rejected = 0
     for title in titles:
-        if title in seen or not NAME_RE.match(title):
+        canonical = title.split(" (")[0].strip()
+        if canonical in seen or not NAME_MULTI_RE.match(canonical):
             rejected += 1
             continue
-        if any(title.startswith(h) for h in WORK_HINTS):
+        if any(canonical.startswith(h) for h in WORK_HINTS):
             rejected += 1
             continue
-        seen.add(title)
-        names.append(CharacterName(canonical=title, source=source))
+        if not _is_plausible_name(canonical):
+            rejected += 1
+            continue
+        seen.add(canonical)
+        names.append(CharacterName(canonical=canonical, source=source))
     logger.info("%s: %d names extracted, %d rejected", source, len(names), rejected)
     return names
 
 
-def title_to_name(title: str, source: str, author: str | None = None) -> CharacterName:
+def title_to_name(
+    title: str, source: str, author: str | None = None
+) -> CharacterName | None:
     """Build a CharacterName from a category member page title.
 
-    Wikipedia disambiguates character pages as "Name (personnage)" — strip it.
+    Wikipedia disambiguates character pages as "Name (personnage)" — strip the
+    parenthetical. Titles that don't survive the name filter (works,
+    adaptations, meta pages — common in author categories like
+    "Catégorie:Arsène Lupin") are rejected: return None.
     """
     canonical = title.split(" (")[0].strip()
+    if not NAME_RE.match(canonical):
+        return None
+    if any(canonical.startswith(h) for h in WORK_HINTS):
+        return None
+    if not _is_plausible_name(canonical):
+        return None
     return CharacterName(canonical=canonical, source=source, author=author)
+
+
+def extract_from_work_section(
+    wikitext: str,
+    source: str,
+    author: str | None,
+    section_heading: str,
+) -> list[CharacterName]:
+    """Extract character names from a section of a work's article.
+
+    Unlike list pages, names in "Personnages" sections of work articles
+    are often plain text at the start of list items, not wikilinks.
+
+    Strategy: isolate the section via its heading, strip the wiki markup,
+    then take the leading name-like prefix of each line.
+    """
+    code = mw.parse(wikitext)
+
+    # get_sections(matches=...) filters sections by heading natively.
+    # include_headings=False: keep only the section's content.
+    sections = code.get_sections(
+        matches=section_heading,  # plain string, the lib compiles it
+        flags=re.IGNORECASE,  # case-insensitive match on headings
+        include_headings=False,
+    )
+    if not sections:
+        logger.warning("%s: no section matching %r found", source, section_heading)
+        return []
+
+    names: list[CharacterName] = []
+    seen: set[str] = set()
+    for section in sections:
+        for line in section.strip_code().split("\n"):
+            line = line.strip().lstrip("-*•").strip()
+            match = NAME_PREFIX_RE.match(line)
+            if not match:
+                continue
+            canonical = match.group(0).rstrip(" ,:")
+            if not _is_plausible_name(canonical):
+                continue
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            names.append(
+                CharacterName(canonical=canonical, source=source, author=author)
+            )
+
+    logger.info(
+        "%s: %d names extracted from section %r", source, len(names), section_heading
+    )
+    return names
