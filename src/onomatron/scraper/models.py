@@ -17,7 +17,7 @@ class SourceSpec(BaseModel):
     """A scrape target. Adding a new author/era = adding a line here."""
 
     name: str
-    kind: str = Field(pattern="^(list_page|category|work_page)$")
+    kind: str = Field(pattern="^(list_page|category|work_page|sparql)$")
     target: str
     section: str | None = None  # work_page only: heading to target
     author: str | None = None

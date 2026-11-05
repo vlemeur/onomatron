@@ -4,6 +4,7 @@ import logging
 import re
 
 import mwparserfromhell as mw
+from pydantic import ValidationError
 
 from onomatron.scraper.models import CharacterName
 
@@ -109,6 +110,19 @@ NON_NAME_WORDS = {
 # Names starting with these are meta-designations (Famille X, Personnages de X),
 # not character names.
 NON_NAME_PREFIXES = ("Famille ", "Liste ", "Personnages de ", "Types de ")
+
+# Wikidata label service falls back to the item ID when no label exists.
+QID_RE = re.compile(r"^Q\d+$")
+
+
+def normalize_canonical(name: str) -> str:
+    """Lenient key for duplicate detection: lowercase, alphanumeric only.
+
+    Collapses punctuation and spacing, so "Jean-Baptiste Adamsberg" and
+    "Jean Baptiste Adamsberg" share a key. Accents are kept on purpose —
+    we prefer missing a rare duplicate to merging distinct names.
+    """
+    return re.sub(r"[\W_]+", "", name.lower())
 
 
 def _is_plausible_name(canonical: str) -> bool:
@@ -218,4 +232,37 @@ def extract_from_work_section(
     logger.info(
         "%s: %d names extracted from section %r", source, len(names), section_heading
     )
+    return names
+
+
+def extract_from_sparql(
+    rows: list[dict[str, str]], author: str | None = None
+) -> list[CharacterName]:
+    """Map SPARQL result rows to CharacterName.
+
+    Wikidata shape: itemLabel (French label of the character) becomes
+    canonical, workLabel (French label of the work) becomes source.
+    Tolerant on their data: rows without a usable label — including the
+    label service's Q-ID fallback — or failing internal validation are
+    skipped, never fatal.
+    """
+    names: list[CharacterName] = []
+    seen: set[str] = set()
+    rejected = 0
+    for row in rows:
+        label = row.get("itemLabel", "").strip()
+        work = row.get("workLabel", "").strip()
+        if not label or not work or QID_RE.match(label):
+            rejected += 1
+            continue
+        if label in seen or not _is_plausible_name(label):
+            rejected += 1
+            continue
+        seen.add(label)
+        try:
+            names.append(CharacterName(canonical=label, source=work, author=author))
+        except ValidationError:
+            # strict pydantic, tolerant on their data: drop, don't crash
+            rejected += 1
+    logger.info("sparql: %d names extracted, %d rows rejected", len(names), rejected)
     return names

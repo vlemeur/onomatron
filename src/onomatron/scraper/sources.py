@@ -335,6 +335,23 @@ SOURCES: list[SourceSpec] = [
         section="Personnages",
         author="Bernard Werber",
     ),
+    # ── Tier 3: Wikidata (SPARQL) ──
+    # Placed last: consolidation keeps the FIRST occurrence of a normalized
+    # canonical, so Wikipédia stays the priority source of every duplicate.
+    # Angle a is broad and noisy by design (works in French, incl. foreign
+    # literature documented in French); angle b is the targeted panel of
+    # French authors. Both are trimmed later — raw counts remain auditable
+    # in the per-source JSONL files.
+    SourceSpec(
+        name="wikidata_french_lit",
+        kind="sparql",
+        target="french_fictional_humans",
+    ),
+    SourceSpec(
+        name="wikidata_authors",
+        kind="sparql",
+        target="authors_french_fictional_humans",
+    ),
 ]
 
 
