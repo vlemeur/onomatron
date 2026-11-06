@@ -352,6 +352,17 @@ SOURCES: list[SourceSpec] = [
         kind="sparql",
         target="authors_french_fictional_humans",
     ),
+    # ── Tier 4: Hugging Face — gold NER annotation (ObTIC/Sorbonne) ──
+    # Same priority rule as Wikidata: placed last so Wikipédia wins on
+    # duplicates. Biggest density gain: ~1 600 gold canonical entities on
+    # 7 novels already in the corpus (e.g. 318 for Le Rouge et le Noir vs
+    # 12 on Wikipédia); the surface aliases only exist here. Please cite
+    # Maurel et al., DH 2025 on reuse.
+    SourceSpec(
+        name="sept_romans_alias",
+        kind="hf_dataset",
+        target="seven_novels_alias_resolution",
+    ),
 ]
 
 

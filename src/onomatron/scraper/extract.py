@@ -114,6 +114,12 @@ NON_NAME_PREFIXES = ("Famille ", "Liste ", "Personnages de ", "Types de ")
 # Wikidata label service falls back to the item ID when no label exists.
 QID_RE = re.compile(r"^Q\d+$")
 
+# Contextual prefixes attached to NER aliases from running text
+# ("au père Walter", "de la Maréchale") — stripped before filtering.
+ALIAS_PREFIX_RE = re.compile(
+    r"^(?:aux?\s+|du\s+|des\s+|de\s+la\s+|de\s+|chez\s+|[dl]')\s*", re.IGNORECASE
+)
+
 
 def normalize_canonical(name: str) -> str:
     """Lenient key for duplicate detection: lowercase, alphanumeric only.
@@ -265,4 +271,67 @@ def extract_from_sparql(
             # strict pydantic, tolerant on their data: drop, don't crash
             rejected += 1
     logger.info("sparql: %d names extracted, %d rows rejected", len(names), rejected)
+    return names
+
+
+def extract_from_ner_rows(
+    rows: list[dict[str, object]],
+    novel_authors: dict[str, str] | None = None,
+) -> list[CharacterName]:
+    """Map annotated NER rows to CharacterName.
+
+    Rows come from the sept-romans alias-resolution gold standard:
+    {form, type, mentions, entity, novel}. Only PER rows carry an entity.
+    Both the gold canonical (entity) and each surface alias (form) become
+    candidates — the alias→entity mapping itself is not representable in
+    CharacterName and belongs to the normalize phase.
+    Tolerant: rows without a usable alias or entity are skipped, never
+    fatal.
+    """
+    novel_authors = novel_authors or {}
+    names: list[CharacterName] = []
+    seen: set[tuple[str, str]] = set()
+    rejected = 0
+
+    def add(canonical: str, novel: str) -> None:
+        nonlocal rejected
+        canonical = canonical.strip()
+        if not canonical or (canonical, novel) in seen:
+            return
+        try:
+            names.append(
+                CharacterName(
+                    canonical=canonical,
+                    source=novel,
+                    author=novel_authors.get(novel),
+                )
+            )
+            seen.add((canonical, novel))
+        except ValidationError:
+            rejected += 1
+
+    for row in rows:
+        if row.get("type") != "PER":
+            continue
+        novel = str(row.get("novel", "")).strip()
+        if not novel:
+            continue
+        entity = str(row.get("entity", "")).strip()
+        if entity and entity != "?":
+            add(entity, novel)
+        form = str(row.get("form", "")).strip()
+        if form:
+            for _ in range(2):  # strip at most two contextual prefixes
+                stripped = ALIAS_PREFIX_RE.sub("", form)
+                if stripped == form:
+                    break
+                form = stripped
+            if NAME_RE.match(form) and _is_plausible_name(form):
+                add(form, novel)
+            else:
+                rejected += 1
+
+    logger.info(
+        "ner rows: %d names extracted, %d aliases rejected", len(names), rejected
+    )
     return names

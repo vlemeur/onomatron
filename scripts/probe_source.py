@@ -10,15 +10,26 @@ Re-run after editing SOURCES: disk cache makes it nearly instant.
 
 import logging
 
-from onomatron.scraper import extract, sources, sparql_queries
-from onomatron.scraper.fetch import SparqlClient, WikipediaClient
+from onomatron.scraper import extract, hf_datasets, sources, sparql_queries
+from onomatron.scraper.fetch import (
+    HuggingFaceClient,
+    SparqlClient,
+    WikipediaClient,
+)
 from onomatron.scraper.models import CharacterName, SourceSpec
+
+# Kinds whose names are compared against the Wikipédia corpus for the
+# "nouveaux / doublons" status: everything not sourced from Wikipédia.
+EXTERNAL_KINDS = ("sparql", "hf_dataset")
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
 
 
 def probe_source(
-    client: WikipediaClient, spec: SourceSpec, sparql_client: SparqlClient
+    client: WikipediaClient,
+    spec: SourceSpec,
+    sparql_client: SparqlClient,
+    hf_client: HuggingFaceClient,
 ) -> tuple[list[CharacterName], str]:
     """Return (names, status) for one source. Never raises: a broken
     source is information, not an error — report it and move on."""
@@ -47,6 +58,21 @@ def probe_source(
             rows = sparql_client.run(query)
             return extract.extract_from_sparql(rows, author=spec.author), "ok"
 
+        if spec.kind == "hf_dataset":
+            try:
+                meta = hf_datasets.DATASETS[spec.target]
+            except KeyError:
+                return [], f"dataset hf inconnu: {spec.target}"
+            rows = hf_client.load_table(
+                meta["repo_id"], meta["config"], meta.get("split", "train")
+            )
+            return (
+                extract.extract_from_ner_rows(
+                    rows, novel_authors=hf_datasets.NOVEL_AUTHORS
+                ),
+                "ok",
+            )
+
         wikitext = client.get_wikitext(spec.target)
         if spec.kind == "list_page":
             return extract.extract_from_list_page(wikitext, source=spec.target), "ok"
@@ -70,24 +96,26 @@ def probe_source(
 def main() -> None:
     client = WikipediaClient()
     sparql_client = SparqlClient()
+    hf_client = HuggingFaceClient()
 
     report: list[tuple[SourceSpec, list[CharacterName], str]] = []
     for spec in sources.SOURCES:
-        names, status = probe_source(client, spec, sparql_client)
+        names, status = probe_source(client, spec, sparql_client, hf_client)
         report.append((spec, names, status))
 
     # Wikipédia-priority duplicate detection: gather the normalized
-    # canonicals of every non-SPARQL source, then classify SPARQL names.
+    # canonicals of every Wikipédia-sourced source, then classify the
+    # external sources' names.
     wiki_keys = {
         extract.normalize_canonical(n.canonical)
         for spec, names, _status in report
-        if spec.kind != "sparql"
+        if spec.kind not in EXTERNAL_KINDS
         for n in names
     }
 
     table = []
     for spec, names, status in report:
-        if spec.kind == "sparql":
+        if spec.kind in EXTERNAL_KINDS:
             dup = sum(
                 1
                 for n in names

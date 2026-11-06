@@ -23,6 +23,9 @@ SPARQL_URL = "https://query.wikidata.org/sparql"
 SPARQL_REQUEST_DELAY = 2.0  # the WDQS rate-limits aggressively — be generous
 SPARQL_TIMEOUT = 90
 
+HF_ROWS_URL = "https://datasets-server.huggingface.co/rows"
+HF_PAGE_SIZE = 100  # datasets-server /rows caps length at 100
+HF_REQUEST_DELAY = 2.0  # shared public service, rate-limits under bursts
 USER_AGENT = "onomatron/0.1 (https://github.com/vlemeur/onomatron; educational project)"
 
 
@@ -179,4 +182,82 @@ class SparqlClient:
 
     def _cache_path(self, query: str) -> Path:
         digest = hashlib.sha1(query.encode()).hexdigest()[:12]
+        return self.cache_dir / f"{digest}.json"
+
+
+class HuggingFaceClient:
+    """Loads table splits from the Hugging Face datasets-server, caching
+    on disk.
+
+    Uses the /rows JSON API (no parquet dependency): the whole split is
+    paginated in one pass, then cached by (repo, config, split) hash.
+    """
+
+    def __init__(self, cache_dir: Path | str = "data/raw/hf") -> None:
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._session = requests.Session()
+        self._session.headers["User-Agent"] = USER_AGENT
+
+    # -- public API ---------------------------------------------------
+
+    def load_table(
+        self, repo_id: str, config: str, split: str = "train"
+    ) -> list[dict[str, object]]:
+        """Return every row of a dataset split, from cache if available.
+
+        Rows are the plain `row` objects of the datasets-server response.
+        """
+        cache_path = self._cache_path(repo_id, config, split)
+        if cache_path.exists():
+            logger.debug("hf cache hit: %s", cache_path.name)
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+
+        logger.info("loading hf dataset %s (%s/%s)", repo_id, config, split)
+        partial_path = cache_path.with_suffix(".partial.json")
+        rows: list[dict[str, object]] = []
+        if partial_path.exists():
+            rows = json.loads(partial_path.read_text(encoding="utf-8"))
+            logger.info("resuming hf pagination at %d rows", len(rows))
+        while True:
+            data = self._fetch_rows(repo_id, config, split, offset=len(rows))
+            batch = [item["row"] for item in data["rows"]]
+            rows.extend(batch)
+            # persist after each page: a 429 mid-pagination must not throw
+            # away the pages already fetched
+            partial_path.write_text(
+                json.dumps(rows, ensure_ascii=False), encoding="utf-8"
+            )
+            if not batch or len(rows) >= data["num_rows_total"]:
+                break
+        cache_path.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+        partial_path.unlink(missing_ok=True)
+        time.sleep(HF_REQUEST_DELAY)
+        return rows
+
+    # -- internals ------------------------------------------------------
+
+    @retry(
+        retry=retry_if_exception_type(requests.RequestException),
+        wait=wait_exponential(multiplier=2, min=5, max=120),
+        stop=stop_after_attempt(8),
+    )
+    def _fetch_rows(self, repo_id: str, config: str, split: str, offset: int) -> dict:
+        resp = self._session.get(
+            HF_ROWS_URL,
+            params={
+                "dataset": repo_id,
+                "config": config,
+                "split": split,
+                "offset": offset,
+                "length": HF_PAGE_SIZE,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        time.sleep(HF_REQUEST_DELAY)
+        return resp.json()
+
+    def _cache_path(self, repo_id: str, config: str, split: str) -> Path:
+        digest = hashlib.sha1(f"{repo_id}/{config}/{split}".encode()).hexdigest()[:12]
         return self.cache_dir / f"{digest}.json"

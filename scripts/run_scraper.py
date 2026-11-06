@@ -12,8 +12,10 @@ the report, not an error — same contract as the probe.
 import logging
 from pathlib import Path
 
-from onomatron.scraper import extract, sources, sparql_queries
-from onomatron.scraper.fetch import SparqlClient, WikipediaClient
+from tqdm import tqdm
+
+from onomatron.scraper import extract, hf_datasets, sources, sparql_queries
+from onomatron.scraper.fetch import HuggingFaceClient, SparqlClient, WikipediaClient
 from onomatron.scraper.models import CharacterName, SourceSpec
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
@@ -24,7 +26,10 @@ CONSOLIDATED_PATH = INTERIM_DIR / "names.jsonl"
 
 
 def scrape_source(
-    client: WikipediaClient, spec: SourceSpec, sparql_client: SparqlClient
+    client: WikipediaClient,
+    spec: SourceSpec,
+    sparql_client: SparqlClient,
+    hf_client: HuggingFaceClient,
 ) -> tuple[list[CharacterName], str]:
     """Extract names for one source. Never raises: a broken source is
     information, not an error — report it and move on."""
@@ -52,6 +57,21 @@ def scrape_source(
                 return [], f"requête sparql inconnue: {spec.target}"
             rows = sparql_client.run(query)
             return extract.extract_from_sparql(rows, author=spec.author), "ok"
+
+        if spec.kind == "hf_dataset":
+            try:
+                meta = hf_datasets.DATASETS[spec.target]
+            except KeyError:
+                return [], f"dataset hf inconnu: {spec.target}"
+            rows = hf_client.load_table(
+                meta["repo_id"], meta["config"], meta.get("split", "train")
+            )
+            return (
+                extract.extract_from_ner_rows(
+                    rows, novel_authors=hf_datasets.NOVEL_AUTHORS
+                ),
+                "ok",
+            )
 
         wikitext = client.get_wikitext(spec.target)
         if spec.kind == "list_page":
@@ -86,15 +106,23 @@ def write_names_jsonl(path: Path, names: list[CharacterName]) -> None:
 def main() -> None:
     client = WikipediaClient()
     sparql_client = SparqlClient()
+    hf_client = HuggingFaceClient()
 
     # (spec, names, status) in SOURCES order — first occurrence wins on
-    # consolidation, so source order in sources.py matters.
+    # consolidation, so source order in sources.py matters. The progress
+    # bar shows the source being scraped and the running name count;
+    # failures are written through the bar without breaking it.
     results: list[tuple[SourceSpec, list[CharacterName], str]] = []
-    for spec in sources.SOURCES:
-        names, status = scrape_source(client, spec, sparql_client)
-        write_names_jsonl(sources.output_path(spec), names)
-        results.append((spec, names, status))
-        logger.info("%s: %d names (%s)", spec.name, len(names), status)
+    total = 0
+    with tqdm(sources.SOURCES, desc="scrape", unit="source") as bar:
+        for spec in bar:
+            bar.set_postfix_str(f"{spec.name} · {total} noms")
+            names, status = scrape_source(client, spec, sparql_client, hf_client)
+            write_names_jsonl(sources.output_path(spec), names)
+            results.append((spec, names, status))
+            total += len(names)
+            if status != "ok":
+                bar.write(f"échec {spec.name}: {status}")
 
     # ── Consolidation: dedupe by normalized canonical (lowercase, sans
     # ponctuation), first occurrence keeps its source — since Wikipédia

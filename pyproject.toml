@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.14.3",
     "requests>=2.34.2",
     "tenacity>=9.2.1",
+    "tqdm>=4.70.1",
 ]
 
 [build-system]
