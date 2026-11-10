@@ -5,7 +5,11 @@ candidate names through the SAME dispatch as the probe, writes one JSONL
 file per source (output_path()) and the consolidated dataset
 data/interim/names.jsonl, deduplicated by normalized canonical (first
 occurrence keeps its source — Wikipedia sources come first, so they win
-over Wikidata). Ends with summary stats. A broken source is a line in
+over Wikidata). The consolidated names then go through the Phase 2
+normalization (clean_name: honorifics, particles, titles, ordinals,
+countries stripped; honorific-only leftovers dropped; duplicates merged
+again) into the plain names-only data/interim/names.txt (one name per
+line). Ends with summary stats. A broken source is a line in
 the report, not an error — same contract as the probe.
 """
 
@@ -14,6 +18,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from onomatron.normalize import clean_name, dedupe_names, is_name_like
 from onomatron.scraper import extract, hf_datasets, sources, sparql_queries
 from onomatron.scraper.fetch import HuggingFaceClient, SparqlClient, WikipediaClient
 from onomatron.scraper.models import CharacterName, SourceSpec
@@ -23,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 INTERIM_DIR = Path("data/interim")
 CONSOLIDATED_PATH = INTERIM_DIR / "names.jsonl"
+NAMES_TXT_PATH = INTERIM_DIR / "names.txt"
 
 
 def scrape_source(
@@ -142,10 +148,26 @@ def main() -> None:
 
     write_names_jsonl(CONSOLIDATED_PATH, consolidated)
 
+    # ── Phase 2: normalize the consolidated names into the final
+    # names-only list. Cleaning can empty a candidate ("Le Roi") or make
+    # two raw names collide ("Henri IV" / "Henri"): drop the former,
+    # merge the latter with the same first-occurrence rule.
+    cleaned = [
+        candidate
+        for candidate in (clean_name(name.canonical) for name in consolidated)
+        if is_name_like(candidate)
+    ]
+    emptied = len(consolidated) - len(cleaned)
+    final_names, new_duplicates = dedupe_names(cleaned)
+    NAMES_TXT_PATH.write_text("\n".join(final_names) + "\n", encoding="utf-8")
+
     # ── Summary stats
     print(f"\nConsolidated dataset: {CONSOLIDATED_PATH}")
+    print(f"Total: {len(consolidated)} unique names ({duplicates} duplicates removed)")
+    print(f"Cleaned dataset: {NAMES_TXT_PATH}")
     print(
-        f"Total: {len(consolidated)} unique names ({duplicates} duplicates removed)\n"
+        f"Total: {len(final_names)} names"
+        f" ({emptied} emptied by cleaning, {new_duplicates} new duplicates removed)\n"
     )
 
     per_author: dict[str | None, int] = {}
