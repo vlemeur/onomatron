@@ -4,7 +4,7 @@ Production orchestrator: iterates over every SourceSpec, extracts the
 candidate names through the SAME dispatch as the probe, writes one JSONL
 file per source (output_path()) and the consolidated dataset
 data/interim/names.jsonl, deduplicated by normalized canonical (first
-occurrence keeps its source — Wikipédia sources come first, so they win
+occurrence keeps its source — Wikipedia sources come first, so they win
 over Wikidata). Ends with summary stats. A broken source is a line in
 the report, not an error — same contract as the probe.
 """
@@ -54,7 +54,7 @@ def scrape_source(
             try:
                 query = sparql_queries.QUERIES[spec.target]
             except KeyError:
-                return [], f"requête sparql inconnue: {spec.target}"
+                return [], f"unknown sparql query: {spec.target}"
             rows = sparql_client.run(query)
             return extract.extract_from_sparql(rows, author=spec.author), "ok"
 
@@ -62,7 +62,7 @@ def scrape_source(
             try:
                 meta = hf_datasets.DATASETS[spec.target]
             except KeyError:
-                return [], f"dataset hf inconnu: {spec.target}"
+                return [], f"unknown hf dataset: {spec.target}"
             rows = hf_client.load_table(
                 meta["repo_id"], meta["config"], meta.get("split", "train")
             )
@@ -79,7 +79,7 @@ def scrape_source(
 
         if spec.kind == "work_page":
             if spec.section is None:
-                return [], "work_page sans section"
+                return [], "work_page without a section"
             return (
                 extract.extract_from_work_section(
                     wikitext,
@@ -90,10 +90,10 @@ def scrape_source(
                 "ok",
             )
     except ValueError as exc:
-        return [], f"page introuvable ({exc})"
+        return [], f"page not found ({exc})"
     except Exception as exc:  # network failure after retries
-        return [], f"échec réseau ({type(exc).__name__})"
-    return [], f"kind inconnu: {spec.kind}"
+        return [], f"network failure ({type(exc).__name__})"
+    return [], f"unknown kind: {spec.kind}"
 
 
 def write_names_jsonl(path: Path, names: list[CharacterName]) -> None:
@@ -116,21 +116,22 @@ def main() -> None:
     total = 0
     with tqdm(sources.SOURCES, desc="scrape", unit="source") as bar:
         for spec in bar:
-            bar.set_postfix_str(f"{spec.name} · {total} noms")
+            bar.set_postfix_str(f"{spec.name} · {total} names")
             names, status = scrape_source(client, spec, sparql_client, hf_client)
             write_names_jsonl(sources.output_path(spec), names)
             results.append((spec, names, status))
             total += len(names)
             if status != "ok":
-                bar.write(f"échec {spec.name}: {status}")
+                bar.write(f"failed {spec.name}: {status}")
 
-    # ── Consolidation: dedupe by normalized canonical (lowercase, sans
-    # ponctuation), first occurrence keeps its source — since Wikipédia
-    # sources come first in SOURCES, they have priority over Wikidata.
+    # ── Consolidation: dedupe by normalized canonical (lowercase,
+    # punctuation stripped), first occurrence keeps its source — since
+    # Wikipedia sources come first in SOURCES, they have priority over
+    # Wikidata.
     seen: set[str] = set()
     consolidated: list[CharacterName] = []
     duplicates = 0
-    for _spec, names, _status in results:
+    for _, names, _ in results:
         for name in names:
             key = extract.normalize_canonical(name.canonical)
             if key in seen:
@@ -141,15 +142,17 @@ def main() -> None:
 
     write_names_jsonl(CONSOLIDATED_PATH, consolidated)
 
-    # ── Stats résumées
-    print(f"\nDataset consolidé: {CONSOLIDATED_PATH}")
-    print(f"Total: {len(consolidated)} noms uniques ({duplicates} doublons éliminés)\n")
+    # ── Summary stats
+    print(f"\nConsolidated dataset: {CONSOLIDATED_PATH}")
+    print(
+        f"Total: {len(consolidated)} unique names ({duplicates} duplicates removed)\n"
+    )
 
     per_author: dict[str | None, int] = {}
-    for spec, names, _status in results:
+    for spec, names, _ in results:
         per_author[spec.author] = per_author.get(spec.author, 0) + len(names)
     width = max(len(a or "—") for a in per_author) + 2
-    print(f"{'author':<{width}}{'names':>7} (par source, avant dédoublonnage)")
+    print(f"{'author':<{width}}{'names':>7} (per source, before deduplication)")
     for author, count in sorted(
         per_author.items(), key=lambda kv: -kv[1]
     ):  # sort by count desc
@@ -157,7 +160,7 @@ def main() -> None:
 
     failed = [(s, status) for s, _n, status in results if status != "ok"]
     if failed:
-        print("\nSources en échec:")
+        print("\nFailed sources:")
         for spec, status in failed:
             print(f"  {spec.name}: {status}")
 

@@ -173,7 +173,7 @@ SOURCES: list[SourceSpec] = [
         target="Personnage d'une pièce de théâtre de Molière",
         author="Molière",
     ),
-    # ── Tier 2: canon par sections (work_page) ──
+    # ── Tier 2: canon via work sections (work_page) ──
     SourceSpec(
         name="manon_lescaut",
         kind="work_page",
@@ -337,7 +337,7 @@ SOURCES: list[SourceSpec] = [
     ),
     # ── Tier 3: Wikidata (SPARQL) ──
     # Placed last: consolidation keeps the FIRST occurrence of a normalized
-    # canonical, so Wikipédia stays the priority source of every duplicate.
+    # canonical, so Wikipedia stays the priority source of every duplicate.
     # Angle a is broad and noisy by design (works in French, incl. foreign
     # literature documented in French); angle b is the targeted panel of
     # French authors. Both are trimmed later — raw counts remain auditable
@@ -353,10 +353,10 @@ SOURCES: list[SourceSpec] = [
         target="authors_french_fictional_humans",
     ),
     # ── Tier 4: Hugging Face — gold NER annotation (ObTIC/Sorbonne) ──
-    # Same priority rule as Wikidata: placed last so Wikipédia wins on
+    # Same priority rule as Wikidata: placed last so Wikipedia wins on
     # duplicates. Biggest density gain: ~1 600 gold canonical entities on
     # 7 novels already in the corpus (e.g. 318 for Le Rouge et le Noir vs
-    # 12 on Wikipédia); the surface aliases only exist here. Please cite
+    # 12 on Wikipedia); the surface aliases only exist here. Please cite
     # Maurel et al., DH 2025 on reuse.
     SourceSpec(
         name="sept_romans_alias",

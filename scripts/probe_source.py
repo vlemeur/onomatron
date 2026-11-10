@@ -2,9 +2,9 @@
 
 Evidence-based source selection. Each SourceSpec is run through the
 appropriate extractor and the result count is printed as a report table.
-SPARQL sources are additionally compared against the Wikipédia names
+SPARQL sources are additionally compared against the Wikipedia names
 (normalized canonical): the status shows new names vs duplicates,
-Wikipédia being the priority source.
+Wikipedia being the priority source.
 Re-run after editing SOURCES: disk cache makes it nearly instant.
 """
 
@@ -18,8 +18,8 @@ from onomatron.scraper.fetch import (
 )
 from onomatron.scraper.models import CharacterName, SourceSpec
 
-# Kinds whose names are compared against the Wikipédia corpus for the
-# "nouveaux / doublons" status: everything not sourced from Wikipédia.
+# Kinds whose names are compared against the Wikipedia corpus for the
+# "new / duplicates" status: everything not sourced from Wikipedia.
 EXTERNAL_KINDS = ("sparql", "hf_dataset")
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
@@ -47,14 +47,14 @@ def probe_source(
                 seen.add(name.canonical)
                 names.append(name)
             if not pages:
-                return [], "ok — catégorie vide ou inexistante"
+                return [], "ok — category empty or nonexistent"
             return names, "ok"
 
         if spec.kind == "sparql":
             try:
                 query = sparql_queries.QUERIES[spec.target]
             except KeyError:
-                return [], f"requête sparql inconnue: {spec.target}"
+                return [], f"unknown sparql query: {spec.target}"
             rows = sparql_client.run(query)
             return extract.extract_from_sparql(rows, author=spec.author), "ok"
 
@@ -62,7 +62,7 @@ def probe_source(
             try:
                 meta = hf_datasets.DATASETS[spec.target]
             except KeyError:
-                return [], f"dataset hf inconnu: {spec.target}"
+                return [], f"unknown hf dataset: {spec.target}"
             rows = hf_client.load_table(
                 meta["repo_id"], meta["config"], meta.get("split", "train")
             )
@@ -78,7 +78,7 @@ def probe_source(
             return extract.extract_from_list_page(wikitext, source=spec.target), "ok"
         if spec.kind == "work_page":
             if spec.section is None:
-                return [], "work_page sans section"
+                return [], "work_page without a section"
             return (
                 extract.extract_from_work_section(
                     wikitext,
@@ -89,8 +89,8 @@ def probe_source(
                 "ok",
             )
     except Exception as exc:  # network failure after retries
-        return [], f"échec réseau ({type(exc).__name__})"
-    return [], f"kind inconnu: {spec.kind}"
+        return [], f"network failure ({type(exc).__name__})"
+    return [], f"unknown kind: {spec.kind}"
 
 
 def main() -> None:
@@ -103,8 +103,8 @@ def main() -> None:
         names, status = probe_source(client, spec, sparql_client, hf_client)
         report.append((spec, names, status))
 
-    # Wikipédia-priority duplicate detection: gather the normalized
-    # canonicals of every Wikipédia-sourced source, then classify the
+    # Wikipedia-priority duplicate detection: gather the normalized
+    # canonicals of every Wikipedia-sourced source, then classify the
     # external sources' names.
     wiki_keys = {
         extract.normalize_canonical(n.canonical)
@@ -122,9 +122,7 @@ def main() -> None:
                 if extract.normalize_canonical(n.canonical) in wiki_keys
             )
             new = len(names) - dup
-            status = (
-                f"{status} — {new} nouveaux / {dup} doublons (Wikipédia prioritaire)"
-            )
+            status = f"{status} — {new} new / {dup} duplicates (Wikipedia has priority)"
         table.append((spec.name, spec.kind, spec.author or "—", len(names), status))
 
     # Pretty-print a fixed-width table
