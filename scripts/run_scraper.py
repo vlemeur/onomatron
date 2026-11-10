@@ -8,7 +8,7 @@ occurrence keeps its source — Wikipedia sources come first, so they win
 over Wikidata). The consolidated names then go through the Phase 2
 normalization (clean_name: honorifics, particles, titles, ordinals,
 countries stripped; honorific-only leftovers dropped; duplicates merged
-again) into the plain names-only data/interim/names.txt (one name per
+again) into the plain names-only data/processed/names.txt (one name per
 line). Ends with summary stats. A broken source is a line in
 the report, not an error — same contract as the probe.
 """
@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 INTERIM_DIR = Path("data/interim")
 CONSOLIDATED_PATH = INTERIM_DIR / "names.jsonl"
-NAMES_TXT_PATH = INTERIM_DIR / "names.txt"
+PROCESSED_DIR = Path("data/processed")
+NAMES_TXT_PATH = PROCESSED_DIR / "names.txt"
 
 
 def scrape_source(
@@ -159,6 +160,7 @@ def main() -> None:
     ]
     emptied = len(consolidated) - len(cleaned)
     final_names, new_duplicates = dedupe_names(cleaned)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     NAMES_TXT_PATH.write_text("\n".join(final_names) + "\n", encoding="utf-8")
 
     # ── Summary stats
