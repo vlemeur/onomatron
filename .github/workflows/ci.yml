@@ -13,14 +13,38 @@ concurrency:
 
 jobs:
   prek:
-    name: prek (ruff format, ruff check, ty, hygiene hooks)
+    name: prek hooks — one step per hook, so the UI shows exactly what failed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      # Same gate as local pre-commit: prek runs every hook in prek.toml.
-      # uv provisions Python 3.14 from requires-python and syncs from uv.lock.
-      - name: Run all prek hooks
-        run: uv run --locked prek run --all-files
+      # Reproducible environment: Python pinned by .python-version (3.14),
+      # dependencies pinned by uv.lock (--locked fails if the lock is stale).
+      - name: Sync locked environment
+        run: uv sync --locked
+      # One step per hook id from prek.toml — same hooks as the local
+      # pre-commit gate, but each gets its own CI log.
+      - name: ruff check
+        run: uv run --locked prek run ruff-check --all-files
+      - name: ruff format
+        run: uv run --locked prek run ruff-format --all-files
+      - name: ty (type check)
+        run: uv run --locked prek run ty --all-files
+      - name: check added large files
+        run: uv run --locked prek run check-added-large-files --all-files
+      - name: check json
+        run: uv run --locked prek run check-json --all-files
+      - name: check merge conflicts
+        run: uv run --locked prek run check-merge-conflict --all-files
+      - name: check toml
+        run: uv run --locked prek run check-toml --all-files
+      - name: check yaml
+        run: uv run --locked prek run check-yaml --all-files
+      - name: detect private keys
+        run: uv run --locked prek run detect-private-key --all-files
+      - name: fix end of files
+        run: uv run --locked prek run end-of-file-fixer --all-files
+      - name: trim trailing whitespace
+        run: uv run --locked prek run trailing-whitespace --all-files
