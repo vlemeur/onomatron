@@ -1,0 +1,26 @@
+name: CI
+
+"on":
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prek:
+    name: prek (ruff format, ruff check, ty, hygiene hooks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # Same gate as local pre-commit: prek runs every hook in prek.toml.
+      # uv provisions Python 3.14 from requires-python and syncs from uv.lock.
+      - name: Run all prek hooks
+        run: uv run --locked prek run --all-files
