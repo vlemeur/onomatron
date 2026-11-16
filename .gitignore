@@ -22,9 +22,12 @@ htmlcov/
 
 # Data and models
 data/*
-# ... except versioned input files (raw_file sources): a fresh clone must be
-# able to reproduce names.txt, and rm -rf data/ must not delete them.
+# data/external/ ships as an EMPTY directory: only .gitkeep is committed.
+# The raw name lists (*.txt) dropped in it are local-only inputs (e.g. from
+# licensed datasets) and stay gitignored on purpose.
 !data/external/
+data/external/*
+!data/external/.gitkeep
 models/
 *.pt
 

@@ -1,4 +1,7 @@
-# Drop external raw name lists here (one name per line, UTF-8), e.g.
-# data/external/extra_names.txt — referenced by the raw_file source in
-# src/onomatron/scraper/sources.py. This directory is versioned on purpose
-# (exception in .gitignore): it holds pipeline INPUTS, not generated data.
+# This directory is committed EMPTY on purpose: every *.txt dropped here is
+# gitignored (see .gitignore) and stays a local-only input.
+#
+# Any *.txt file in this directory is loaded by the raw_file source in
+# src/onomatron/scraper/sources.py (one name per line, UTF-8), whatever its
+# name. On a fresh clone the directory is empty and run_scraper.py simply
+# reports "no .txt files in data/external" — not an error.

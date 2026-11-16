@@ -81,19 +81,26 @@ def scrape_source(
                 "ok",
             )
 
-        # Local raw name file (versioned input, e.g. data/external/): read
-        # from disk here in the orchestrator — fetch.py stays network-only.
+        # Local raw name files (versioned inputs, e.g. data/external/): the
+        # target is a directory and every *.txt in it is loaded, whatever its
+        # name. Read from disk here in the orchestrator — fetch.py stays
+        # network-only.
         if spec.kind == "raw_file":
-            path = Path(spec.target)
-            if not path.is_file():
-                return [], f"missing file: {spec.target}"
-            lines = path.read_text(encoding="utf-8").splitlines()
-            return (
-                extract.extract_from_raw_lines(
-                    lines, source=spec.target, author=spec.author
-                ),
-                "ok",
-            )
+            root = Path(spec.target)
+            files = sorted(root.glob("*.txt")) if root.is_dir() else []
+            if not files:
+                return [], f"no .txt files in {spec.target}"
+            names: list[CharacterName] = []
+            seen: set[str] = set()
+            for file in files:
+                lines = file.read_text(encoding="utf-8").splitlines()
+                for name in extract.extract_from_raw_lines(
+                    lines, source=str(file), author=spec.author
+                ):
+                    if name.canonical not in seen:
+                        seen.add(name.canonical)
+                        names.append(name)
+            return names, "ok"
 
         wikitext = client.get_wikitext(spec.target)
         if spec.kind == "list_page":
