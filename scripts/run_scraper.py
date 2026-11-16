@@ -10,8 +10,8 @@ over Wikidata). The consolidated names then go through the Phase 2
 normalization (clean_name: honorifics, particles, titles, ordinals,
 countries stripped; honorific-only leftovers dropped; duplicates merged
 again) into the plain names-only data/processed/names.txt (one name per
-line). Ends with summary stats. A broken source is a line in
-the report, not an error — same contract as the probe.
+line, sorted for a deterministic output). Ends with summary stats. A broken
+source is a line in the report, not an error.
 """
 
 import logging
@@ -182,6 +182,9 @@ def main() -> None:
     ]
     emptied = len(consolidated) - len(cleaned)
     final_names, new_duplicates = dedupe_names(cleaned)
+    # Deterministic output (byte-identical for the same name set); consumers
+    # shuffle at training time anyway, so order carries no information.
+    final_names = sorted(final_names)
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     NAMES_TXT_PATH.write_text("\n".join(final_names) + "\n", encoding="utf-8")
 
