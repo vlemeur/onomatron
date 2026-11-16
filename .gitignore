@@ -21,7 +21,13 @@ htmlcov/
 .mypy_cache/
 
 # Data and models
-data/
+data/*
+# data/external/ ships as an EMPTY directory: only .gitkeep is committed.
+# The raw name lists (*.txt) dropped in it are local-only inputs (e.g. from
+# licensed datasets) and stay gitignored on purpose.
+!data/external/
+data/external/*
+!data/external/.gitkeep
 models/
 *.pt
 
@@ -32,3 +38,7 @@ models/
 .vscode/
 .idea/
 .DS_Store
+
+# Agents file
+.vibe/
+AGENTS.md

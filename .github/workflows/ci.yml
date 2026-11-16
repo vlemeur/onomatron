@@ -1,0 +1,54 @@
+name: CI
+
+"on":
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prek:
+    name: prek — lint, types, file checks
+    # Pinned runner image: ubuntu-latest migrates to Ubuntu 26 (2026-10-19);
+    # bump deliberately instead of floating. Lint-only job, 24.04 is plenty.
+    runs-on: ubuntu-24.04
+    steps:
+      # v6 / v7 are the Node 24 releases — v4/v5 still target Node 20 and
+      # emit deprecation warnings (Node 20 was removed from runners 2026-09).
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      # Reproducible environment: Python pinned by .python-version (3.14),
+      # dependencies pinned by uv.lock (--locked fails if the lock is stale).
+      - name: Sync locked environment
+        run: uv sync --locked
+      # One step per hook id from prek.toml — same hooks as the local
+      # pre-commit gate, but each gets its own CI log.
+      - name: ruff check
+        run: uv run --locked prek run ruff-check --all-files
+      - name: ruff format
+        run: uv run --locked prek run ruff-format --all-files
+      - name: ty (type check)
+        run: uv run --locked prek run ty --all-files
+      - name: check added large files
+        run: uv run --locked prek run check-added-large-files --all-files
+      - name: check json
+        run: uv run --locked prek run check-json --all-files
+      - name: check merge conflicts
+        run: uv run --locked prek run check-merge-conflict --all-files
+      - name: check toml
+        run: uv run --locked prek run check-toml --all-files
+      - name: check yaml
+        run: uv run --locked prek run check-yaml --all-files
+      - name: detect private keys
+        run: uv run --locked prek run detect-private-key --all-files
+      - name: fix end of files
+        run: uv run --locked prek run end-of-file-fixer --all-files
+      - name: trim trailing whitespace
+        run: uv run --locked prek run trailing-whitespace --all-files
