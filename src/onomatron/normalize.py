@@ -21,6 +21,7 @@ keeping the first occurrence, same key as the Phase 1 consolidation.
 """
 
 import re
+import unicodedata
 
 from onomatron.scraper.extract import normalize_canonical
 
@@ -213,3 +214,33 @@ def dedupe_names(names: list[str]) -> tuple[list[str], int]:
         seen.add(key)
         unique.append(name)
     return unique, len(names) - len(unique)
+
+
+# Characters allowed in a model-ready name besides latin letters:
+# space (multi-word names), apostrophe, hyphen.
+MODEL_EXTRA_CHARS = " '-"
+
+
+def _is_latin_letter(ch: str) -> bool:
+    try:
+        return unicodedata.name(ch).startswith("LATIN")
+    except ValueError:
+        return False
+
+
+def sanitize_for_model(name: str) -> str | None:
+    """Return the model-ready form of a cleaned name, or None to drop it.
+
+    Lowercases, folds the curly apostrophe and keeps only latin letters,
+    spaces, apostrophes and hyphens: digits, symbols and other scripts
+    (role lists like "Agent 212") are not trainable signal for a
+    character model. Only the final names.txt is sanitized — the
+    consolidated data/interim/names.jsonl keeps the original forms.
+    """
+    name = name.replace("’", "'").lower()
+    if not name.strip():
+        return None
+    for ch in name:
+        if not ((ch.isalpha() and _is_latin_letter(ch)) or ch in MODEL_EXTRA_CHARS):
+            return None
+    return name
