@@ -8,10 +8,13 @@ data/interim/names.jsonl, deduplicated by normalized canonical (first
 occurrence keeps its source — Wikipedia sources come first, so they win
 over Wikidata). The consolidated names then go through the Phase 2
 normalization (clean_name: honorifics, particles, titles, ordinals,
-countries stripped; honorific-only leftovers dropped; duplicates merged
-again) into the plain names-only data/processed/names.txt (one name per
-line, sorted for a deterministic output). Ends with summary stats. A broken
-source is a line in the report, not an error.
+countries stripped; honorific-only leftovers dropped), then
+sanitize_for_model (lowercase; names with digits/symbols dropped,
+apostrophes turned into spaces — alphabet = latin letters + space) and
+duplicates merged again, into the plain model-ready
+names-only data/processed/names.txt (one name per line, sorted for a
+deterministic output). Ends with summary stats. A broken source is a
+line in the report, not an error.
 """
 
 import logging
@@ -19,7 +22,12 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from onomatron.normalize import clean_name, dedupe_names, is_name_like
+from onomatron.normalize import (
+    clean_name,
+    dedupe_names,
+    is_name_like,
+    sanitize_for_model,
+)
 from onomatron.scraper import extract, hf_datasets, sources, sparql_queries
 from onomatron.scraper.fetch import HuggingFaceClient, SparqlClient, WikipediaClient
 from onomatron.scraper.models import CharacterName, SourceSpec
@@ -181,7 +189,13 @@ def main() -> None:
         if is_name_like(candidate)
     ]
     emptied = len(consolidated) - len(cleaned)
-    final_names, new_duplicates = dedupe_names(cleaned)
+    # Model-ready sanitization: lowercase; names containing anything but
+    # latin letters/spaces/apostrophes are dropped; apostrophes become
+    # spaces; rare foreign letters are folded to their closest base.
+    # names.jsonl above keeps the original forms.
+    sanitized = [s for s in (sanitize_for_model(c) for c in cleaned) if s is not None]
+    dropped = len(cleaned) - len(sanitized)
+    final_names, new_duplicates = dedupe_names(sanitized)
     # Deterministic output (byte-identical for the same name set); consumers
     # shuffle at training time anyway, so order carries no information.
     final_names = sorted(final_names)
@@ -194,7 +208,8 @@ def main() -> None:
     print(f"Cleaned dataset: {NAMES_TXT_PATH}")
     print(
         f"Total: {len(final_names)} names"
-        f" ({emptied} emptied by cleaning, {new_duplicates} new duplicates removed)\n"
+        f" ({emptied} emptied by cleaning, {dropped} dropped by sanitization,"
+        f" {new_duplicates} new duplicates removed)\n"
     )
 
     per_author: dict[str | None, int] = {}

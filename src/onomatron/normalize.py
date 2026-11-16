@@ -21,6 +21,7 @@ keeping the first occurrence, same key as the Phase 1 consolidation.
 """
 
 import re
+import unicodedata
 
 from onomatron.scraper.extract import normalize_canonical
 
@@ -213,3 +214,53 @@ def dedupe_names(names: list[str]) -> tuple[list[str], int]:
         seen.add(key)
         unique.append(name)
     return unique, len(names) - len(unique)
+
+
+def _is_latin_letter(ch: str) -> bool:
+    try:
+        return unicodedata.name(ch).startswith("LATIN")
+    except ValueError:
+        return False
+
+
+# Rare foreign letters (Iberian, German, Scandinavian...) folded to their
+# closest base letter(s). The French accent set (à â ç é è ê ë î ï ô ù û) is
+# kept on purpose — é alone is ~1.5% of characters. ß is the German Eszett
+# ("sharp s", /s/): standard transliteration is "ss" (Straße -> Strasse).
+FOLD_FOREIGN = {
+    "á": "a",
+    "ã": "a",
+    "ä": "a",
+    "ó": "o",
+    "ö": "o",
+    "õ": "o",
+    "ø": "o",
+    "ü": "u",
+    "ń": "n",
+    "ß": "ss",
+    "æ": "ae",
+    "œ": "oe",
+}
+
+
+def sanitize_for_model(name: str) -> str | None:
+    """Return the model-ready form of a cleaned name, or None to drop it.
+
+    Lowercases. A name containing anything but latin letters, spaces and
+    apostrophes (digits, hyphens, symbols, other scripts) is dropped
+    whole. Rare foreign letters are folded to their closest base
+    (FOLD_FOREIGN), apostrophes become spaces ("d'artagnan" ->
+    "d artagnan") and whitespace is collapsed, so the model alphabet is
+    latin letters plus the space. A name with fewer than two letters is
+    dropped. Only the final names.txt is sanitized — the consolidated
+    data/interim/names.jsonl keeps the original forms.
+    """
+    name = name.lower()
+    for ch in name:
+        if not ((ch.isalpha() and _is_latin_letter(ch)) or ch in " ’'"):
+            return None
+    name = "".join(FOLD_FOREIGN.get(ch, ch) for ch in name)
+    name = " ".join(name.replace("’", " ").replace("'", " ").split())
+    if sum(ch.isalpha() for ch in name) < 2:
+        return None
+    return name
