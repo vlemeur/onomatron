@@ -28,6 +28,11 @@ from pathlib import Path
 
 from onomatron.scraper.models import SourceSpec
 
+
+def output_path(spec: SourceSpec, root: str | Path = "data/interim") -> Path:
+    return Path(root) / f"{spec.name}.jsonl"
+
+
 SOURCES: list[SourceSpec] = [
     SourceSpec(
         name="comedie_humaine",
@@ -364,7 +369,3 @@ SOURCES: list[SourceSpec] = [
         target="seven_novels_alias_resolution",
     ),
 ]
-
-
-def output_path(spec: SourceSpec, root: str | Path = "data/interim") -> Path:
-    return Path(root) / f"{spec.name}.jsonl"
