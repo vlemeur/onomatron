@@ -39,13 +39,15 @@ class Vocab:
         return len(self.stoi)
 
 
-def make_bigram_pairs(names: list[str], vocab: Vocab) -> torch.Tensor:
-    """All (context, next) index pairs of the names, each name padded with
-    the sentinel on both sides. Returns a (N, 2) int64 tensor."""
-    pairs: list[tuple[int, int]] = []
+def make_ngram_pairs(names: list[str], vocab: Vocab, n: int) -> torch.Tensor:
+    """All n-grams of the names as index tuples: n-1 context chars + target.
+    Each name is padded with n-1 sentinels at the start and one at the end.
+    Returns a (N, n) int64 tensor; the last column is the target."""
+    if n < 2:
+        raise ValueError("n must be >= 2")
+    pairs: list[tuple[int, ...]] = []
     for name in names:
-        chs = [SENTINEL, *name, SENTINEL]
-        pairs.extend(
-            (vocab.stoi[a], vocab.stoi[b]) for a, b in zip(chs, chs[1:], strict=False)
-        )
+        chs = [SENTINEL] * (n - 1) + list(name) + [SENTINEL]
+        windows = zip(*(chs[i:] for i in range(n)), strict=False)
+        pairs.extend(tuple(vocab.stoi[c] for c in w) for w in windows)
     return torch.tensor(pairs, dtype=torch.int64)
