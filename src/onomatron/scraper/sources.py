@@ -368,4 +368,14 @@ SOURCES: list[SourceSpec] = [
         kind="hf_dataset",
         target="seven_novels_alias_resolution",
     ),
+    # ── Tier 5: external raw name list (local file, versioned in the repo) ──
+    # Same priority rule: last in SOURCES, so every scraped source wins on
+    # duplicates. One name per line, UTF-8 — drop the file at
+    # data/external/extra_names.txt (versioned: .gitignore exception).
+    # Read from disk by run_scraper.py, never fetched over the network.
+    SourceSpec(
+        name="external_extra_names",
+        kind="raw_file",
+        target="data/external/extra_names.txt",
+    ),
 ]

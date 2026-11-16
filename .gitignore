@@ -21,7 +21,10 @@ htmlcov/
 .mypy_cache/
 
 # Data and models
-data/
+data/*
+# ... except versioned input files (raw_file sources): a fresh clone must be
+# able to reproduce names.txt, and rm -rf data/ must not delete them.
+!data/external/
 models/
 *.pt
 

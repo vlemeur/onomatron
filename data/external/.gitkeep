@@ -1,0 +1,4 @@
+# Drop external raw name lists here (one name per line, UTF-8), e.g.
+# data/external/extra_names.txt — referenced by the raw_file source in
+# src/onomatron/scraper/sources.py. This directory is versioned on purpose
+# (exception in .gitignore): it holds pipeline INPUTS, not generated data.

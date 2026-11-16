@@ -1,7 +1,8 @@
 """Scrape character names from French literature via the Wikipedia API.
 
 Production orchestrator: iterates over every SourceSpec, extracts the
-candidate names through the SAME dispatch as the probe, writes one JSONL
+candidate names through the scrape_source dispatch (network sources via the
+fetch clients, local raw files straight from disk), writes one JSONL
 file per source (output_path()) and the consolidated dataset
 data/interim/names.jsonl, deduplicated by normalized canonical (first
 occurrence keeps its source — Wikipedia sources come first, so they win
@@ -76,6 +77,20 @@ def scrape_source(
             return (
                 extract.extract_from_ner_rows(
                     rows, novel_authors=hf_datasets.NOVEL_AUTHORS
+                ),
+                "ok",
+            )
+
+        # Local raw name file (versioned input, e.g. data/external/): read
+        # from disk here in the orchestrator — fetch.py stays network-only.
+        if spec.kind == "raw_file":
+            path = Path(spec.target)
+            if not path.is_file():
+                return [], f"missing file: {spec.target}"
+            lines = path.read_text(encoding="utf-8").splitlines()
+            return (
+                extract.extract_from_raw_lines(
+                    lines, source=spec.target, author=spec.author
                 ),
                 "ok",
             )

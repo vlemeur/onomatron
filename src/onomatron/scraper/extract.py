@@ -138,6 +138,30 @@ def _is_plausible_name(canonical: str) -> bool:
     return not canonical.startswith(NON_NAME_PREFIXES)
 
 
+def extract_from_raw_lines(
+    lines: list[str], source: str, author: str | None = None
+) -> list[CharacterName]:
+    """Build CharacterNames from the raw lines of a local names file (one
+    name per line). No parsing, just tolerance: blank lines and lines that
+    fail model validation (e.g. over 80 chars) are skipped, exact duplicates
+    dropped. The Phase 2 normalization does the real cleaning downstream.
+    """
+    names: list[CharacterName] = []
+    seen: set[str] = set()
+    for line in lines:
+        canonical = line.strip()
+        if not canonical or canonical in seen:
+            continue
+        try:
+            name = CharacterName(canonical=canonical, source=source, author=author)
+        except ValidationError:
+            logger.debug("skipping invalid raw line: %r", canonical[:80])
+            continue
+        seen.add(canonical)
+        names.append(name)
+    return names
+
+
 def extract_from_list_page(wikitext: str, source: str) -> list[CharacterName]:
     """Extract character names from a "List of characters" page.
 
