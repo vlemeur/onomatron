@@ -9,8 +9,9 @@ occurrence keeps its source — Wikipedia sources come first, so they win
 over Wikidata). The consolidated names then go through the Phase 2
 normalization (clean_name: honorifics, particles, titles, ordinals,
 countries stripped; honorific-only leftovers dropped), then
-sanitize_for_model (lowercase, latin letters + space/apostrophe/hyphen
-only) and duplicates merged again, into the plain model-ready
+sanitize_for_model (lowercase; names with digits/symbols dropped,
+apostrophes turned into spaces — alphabet = latin letters + space) and
+duplicates merged again, into the plain model-ready
 names-only data/processed/names.txt (one name per line, sorted for a
 deterministic output). Ends with summary stats. A broken source is a
 line in the report, not an error.
@@ -188,8 +189,10 @@ def main() -> None:
         if is_name_like(candidate)
     ]
     emptied = len(consolidated) - len(cleaned)
-    # Model-ready sanitization (lowercase, ’ folded, latin letters + space,
-    # apostrophe, hyphen only). names.jsonl above keeps the original forms.
+    # Model-ready sanitization: lowercase; names containing anything but
+    # latin letters/spaces/apostrophes are dropped; apostrophes become
+    # spaces; rare foreign letters are folded to their closest base.
+    # names.jsonl above keeps the original forms.
     sanitized = [s for s in (sanitize_for_model(c) for c in cleaned) if s is not None]
     dropped = len(cleaned) - len(sanitized)
     final_names, new_duplicates = dedupe_names(sanitized)
