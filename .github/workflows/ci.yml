@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   prek:
-    name: prek hooks — one step per hook, so the UI shows exactly what failed
+    name: prek — lint, types, file checks
     # Pinned runner image: ubuntu-latest migrates to Ubuntu 26 (2026-10-19);
     # bump deliberately instead of floating. Lint-only job, 24.04 is plenty.
     runs-on: ubuntu-24.04
