@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from onomatron.data import Vocab
+from onomatron.data import SENTINEL, Vocab
 
 logger = logging.getLogger(__name__)
 
@@ -55,3 +55,41 @@ class MLP(nn.Module):
         """Mean negative log-likelihood per example, directly comparable to
         NGramModel.nll."""
         return float(self.loss(x, ys))
+
+    @torch.no_grad()
+    def probs(self, x: torch.Tensor) -> torch.Tensor:
+        """P(next | context)"""
+        return F.softmax(self(x), dim=1)
+
+    @torch.no_grad()
+    def sample(
+        self, n: int = 10, seed: int | None = None, max_len: int = 40
+    ) -> list[str]:
+        """Sample n names with a rolling context of n-1 chars, padded with
+        the sentinel at the start; draw until the sentinel comes back
+        (max_len as a runaway guard)."""
+        gen = torch.Generator().manual_seed(seed) if seed is not None else None
+
+        eos = self.vocab.stoi[SENTINEL]
+
+        out: list[str] = []
+
+        for _ in range(n):
+            chars: list[str] = []
+            context = torch.tensor([eos] * self.block_size).view((1, self.block_size))
+            while len(chars) < max_len:
+                row = self.probs(context)
+                ix = int(
+                    torch.multinomial(
+                        row,
+                        num_samples=1,
+                        replacement=True,
+                        generator=gen,
+                    ).item()
+                )
+                if ix == eos:
+                    break
+                chars.append(self.vocab.itos[ix])
+                context = torch.cat([context[:, 1:], torch.tensor([[ix]])], dim=1)
+            out.append("".join(chars))
+        return out
