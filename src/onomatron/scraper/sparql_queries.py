@@ -10,6 +10,12 @@ Reference points:
   P407      = language of the work (for a book ≈ language of the original
               text)
   P50       = author
+  Q202444   = given name (prénom; male/female/unisex are subclasses via P279)
+  Q101352   = family name (nom de famille / patronyme)
+  schema:isPartOf <https://fr.wikipedia.org/> = has a frwiki article; used
+              as the "French" proxy for name items (P17 is not allowed on
+              them per the P17 constraint report, and P495 is nearly empty
+              there)
 """
 
 QUERIES: dict[str, str] = {
@@ -53,6 +59,27 @@ SELECT ?item ?work ?itemLabel ?workLabel WHERE {
   ?item wdt:P31 wd:Q15632617 ;
         wdt:P1441 ?work .
   ?work wdt:P50 ?author .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en". }
+}
+""",
+    # French given names / family names: name-class items with an article on
+    # the French Wikipedia. Name items have no "work": the BIND supplies the
+    # constant workLabel that extract_from_sparql uses as the source field.
+    "french_given_names": """\
+SELECT ?item ?itemLabel ?workLabel WHERE {
+  ?item wdt:P31/wdt:P279* wd:Q202444 .
+  ?article schema:about ?item ;
+           schema:isPartOf <https://fr.wikipedia.org/> .
+  BIND("Prénoms français (Wikidata)" AS ?workLabel)
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en". }
+}
+""",
+    "french_family_names": """\
+SELECT ?item ?itemLabel ?workLabel WHERE {
+  ?item wdt:P31/wdt:P279* wd:Q101352 .
+  ?article schema:about ?item ;
+           schema:isPartOf <https://fr.wikipedia.org/> .
+  BIND("Patronymes français (Wikidata)" AS ?workLabel)
   SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en". }
 }
 """,
