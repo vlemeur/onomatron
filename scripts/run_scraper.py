@@ -10,7 +10,8 @@ over Wikidata). The consolidated names then go through the Phase 2
 normalization (clean_name: honorifics, particles, titles, ordinals,
 countries stripped; honorific-only leftovers dropped), then
 sanitize_for_model (lowercase; names with digits/symbols dropped,
-apostrophes turned into spaces — alphabet = latin letters + space) and
+apostrophes turned into spaces and full names split on the space —
+"nom prénom" becomes two names, alphabet = latin letters only) and
 duplicates merged again, into the plain model-ready
 names-only data/processed/names.txt (one name per line, sorted for a
 deterministic output). Ends with summary stats. A broken source is a
@@ -191,10 +192,17 @@ def main() -> None:
     emptied = len(consolidated) - len(cleaned)
     # Model-ready sanitization: lowercase; names containing anything but
     # latin letters/spaces/apostrophes are dropped; apostrophes become
-    # spaces; rare foreign letters are folded to their closest base.
+    # spaces and the result is split on whitespace ("nom prénom" -> two
+    # names), so the model alphabet is latin letters only; rare foreign
+    # letters are folded to their closest base.
     # names.jsonl above keeps the original forms.
-    sanitized = [s for s in (sanitize_for_model(c) for c in cleaned) if s is not None]
-    dropped = len(cleaned) - len(sanitized)
+    sanitized: list[str] = []
+    dropped = 0
+    for candidate in cleaned:
+        parts = sanitize_for_model(candidate)
+        if not parts:
+            dropped += 1
+        sanitized.extend(parts)
     final_names, new_duplicates = dedupe_names(sanitized)
     # Deterministic output (byte-identical for the same name set); consumers
     # shuffle at training time anyway, so order carries no information.

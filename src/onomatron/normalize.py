@@ -243,24 +243,24 @@ FOLD_FOREIGN = {
 }
 
 
-def sanitize_for_model(name: str) -> str | None:
-    """Return the model-ready form of a cleaned name, or None to drop it.
+def sanitize_for_model(name: str) -> list[str]:
+    """Return the model-ready form(s) of a cleaned name: one entry per
+    part, empty list to drop the candidate.
 
     Lowercases. A name containing anything but latin letters, spaces and
     apostrophes (digits, hyphens, symbols, other scripts) is dropped
     whole. Rare foreign letters are folded to their closest base
-    (FOLD_FOREIGN), apostrophes become spaces ("d'artagnan" ->
-    "d artagnan") and whitespace is collapsed, so the model alphabet is
-    latin letters plus the space. A name with fewer than two letters is
-    dropped. Only the final names.txt is sanitized — the consolidated
-    data/interim/names.jsonl keeps the original forms.
+    (FOLD_FOREIGN) and apostrophes become spaces ("d'artagnan" ->
+    "d artagnan"); the result is split on whitespace, so a full name
+    "nom prénom" yields two names. Each part must keep at least two
+    letters, so the model alphabet is latin letters only — the space
+    never reaches the model. Only the final names.txt is sanitized —
+    the consolidated data/interim/names.jsonl keeps the original forms.
     """
     name = name.lower()
     for ch in name:
         if not ((ch.isalpha() and _is_latin_letter(ch)) or ch in " ’'"):
-            return None
+            return []
     name = "".join(FOLD_FOREIGN.get(ch, ch) for ch in name)
     name = " ".join(name.replace("’", " ").replace("'", " ").split())
-    if sum(ch.isalpha() for ch in name) < 2:
-        return None
-    return name
+    return [p for p in name.split() if sum(ch.isalpha() for ch in p) >= 2]

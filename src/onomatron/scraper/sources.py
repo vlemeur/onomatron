@@ -380,4 +380,31 @@ SOURCES: list[SourceSpec] = [
         kind="raw_file",
         target="data/external",
     ),
+    # ── Tier 5b: French first names / family names (network) ──
+    # Same priority rule: last in SOURCES, so every scraped source wins on
+    # duplicates. Wikipedia categories give the curated articles
+    # (Catégorie:Prénom français ~530 pages, Catégorie:Patronyme français
+    # ~2 900 pages; title_to_name strips the "(prénom)"/"(patronyme)"
+    # suffixes); Wikidata SPARQL gives the full country-of-origin=France
+    # sets via P495 (P17 is not allowed on name items).
+    SourceSpec(
+        name="prenoms_fr_wiki",
+        kind="category",
+        target="Catégorie:Prénom français",
+    ),
+    SourceSpec(
+        name="patronymes_fr_wiki",
+        kind="category",
+        target="Catégorie:Patronyme français",
+    ),
+    SourceSpec(
+        name="prenoms_wikidata",
+        kind="sparql",
+        target="french_given_names",
+    ),
+    SourceSpec(
+        name="patronymes_wikidata",
+        kind="sparql",
+        target="french_family_names",
+    ),
 ]

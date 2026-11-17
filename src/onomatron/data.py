@@ -8,7 +8,8 @@ import torch
 logger = logging.getLogger(__name__)
 
 # Single begin/end-of-name character, index 0 in the vocab. Safe because the
-# pipeline guarantees names.txt contains only latin letters and spaces.
+# pipeline guarantees names.txt contains only latin letters (full names are
+# split on the space in Phase 2, so the space is never in the alphabet).
 SENTINEL = "."
 
 DEFAULT_NAMES_PATH = Path("data/processed/names.txt")
