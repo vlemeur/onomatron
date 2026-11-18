@@ -3,7 +3,8 @@
 from collections.abc import Callable
 from typing import NamedTuple
 
-import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
@@ -55,12 +56,63 @@ def lr_range_test(
 
 
 def plot_lr_range(lrs: list[float], losses: list[float], steps: int = 100) -> float:
-    """Plot loss vs learning rate on a log scale; return the lr at the minimum."""
-    plt.plot(lrs, losses)
-    plt.xscale("log")
-    plt.xlabel("learning rate")
-    plt.ylabel(f"loss after {steps} steps")
-    return lrs[int(torch.tensor(losses).argmin())]
+    """Plot loss vs learning rate (log scale); return the lr at the steepest
+    descent of the curve (Smith 2015), NOT divided by ~10 — the caller does.
+
+    More robust than the raw argmin when the curve gets noisy at high lr: past
+    a certain lr the loss after `steps` depends on minibatch luck, so the
+    global min can be a fluke that diverges in real training. The steepest
+    slope is measured between the means of two adjacent blocks of ~10% of the
+    curve (noise cancels in each mean, the log-lr denominator is ~constant).
+    The winning segment is drawn on the figure and the selected lr is marked
+    with a black dashed vertical line.
+    """
+    lrs_t = torch.tensor(lrs, dtype=torch.float64)
+    loss_t = torch.tensor(losses, dtype=torch.float64)
+    n = loss_t.numel()
+    k = max(2, n // 10)
+    log_lrs = torch.log10(lrs_t)
+    best_i, best_slope = 0, float("inf")
+    for i in range(0, n - 2 * k + 1, max(1, k // 2)):
+        s = (loss_t[i + k : i + 2 * k].mean() - loss_t[i : i + k].mean()) / (
+            log_lrs[i + k : i + 2 * k].mean() - log_lrs[i : i + k].mean()
+        )
+        if float(s) < best_slope:
+            best_slope, best_i = float(s), i
+    best_lr = float(lrs_t[best_i + k // 2])
+
+    fig = go.Figure(go.Scatter(x=lrs, y=losses, mode="lines", name="loss"))
+    # steepest segment: straight line between the means of the two blocks
+    fig.add_scatter(
+        x=[
+            float(lrs_t[best_i : best_i + k].mean()),
+            float(lrs_t[best_i + k : best_i + 2 * k].mean()),
+        ],
+        y=[
+            float(loss_t[best_i : best_i + k].mean()),
+            float(loss_t[best_i + k : best_i + 2 * k].mean()),
+        ],
+        mode="lines+markers",
+        name="steepest segment",
+        line_color=px.colors.qualitative.Set2[1],
+    )
+    # selected lr: black dashed vertical line + marker on the curve
+    fig.add_vline(x=best_lr, line=dict(color="black", dash="dash"))
+    idx = int(torch.argmin((log_lrs - torch.log10(torch.tensor(best_lr))).abs()))
+    fig.add_scatter(
+        x=[lrs[idx]],
+        y=[losses[idx]],
+        mode="markers",
+        name=f"selected lr = {best_lr:.3g}",
+        marker=dict(color="black", size=12, symbol="x"),
+    )
+    fig.update_layout(
+        xaxis_type="log",
+        xaxis_title="learning rate",
+        yaxis_title=f"loss after {steps} steps",
+    )
+    fig.show()
+    return best_lr
 
 
 def train(
@@ -128,23 +180,33 @@ def plot_history(history: TrainHistory, smooth: int | None = None) -> None:
     With `smooth` > 1, the per-step losses are replaced by a rolling mean
     over `smooth` steps — the raw minibatch curve is noisy.
     """
+    fig = go.Figure()
     losses = history.train_losses
     if smooth is not None and 1 < smooth < len(losses):
         window = (
             torch.tensor(losses, dtype=torch.float32).unfold(0, smooth, 1).mean(dim=1)
         )
         centers = torch.arange(len(window)) + (smooth - 1) / 2
-        plt.plot(
-            centers.tolist(),
-            window.tolist(),
-            color="tab:blue",
-            label=f"train (rolling mean, w={smooth})",
+        fig.add_scatter(
+            x=centers.tolist(),
+            y=window.tolist(),
+            mode="lines",
+            name=f"train (rolling mean, w={smooth})",
         )
     else:
-        plt.plot(losses, color="tab:blue", label="train")
+        fig.add_scatter(
+            x=list(range(len(losses))),
+            y=losses,
+            mode="lines",
+            name="train",
+        )
     if history.val:
         steps, nlls = zip(*history.val, strict=True)
-        plt.plot(steps, nlls, marker="o", color="tab:orange", label="val")
-    plt.xlabel("step")
-    plt.ylabel("loss / NLL")
-    plt.legend()
+        fig.add_scatter(
+            x=list(steps),
+            y=list(nlls),
+            mode="markers",
+            name="val",
+        )
+    fig.update_layout(xaxis_title="step", yaxis_title="loss / NLL")
+    fig.show()
