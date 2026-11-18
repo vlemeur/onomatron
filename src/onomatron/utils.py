@@ -66,6 +66,7 @@ def train(
     x_val: torch.Tensor | None = None,
     y_val: torch.Tensor | None = None,
     eval_every: int | None = None,
+    clip_grad: float | None = None,
 ) -> TrainHistory:
     """Train `model` on (x, y); return a TrainHistory.
 
@@ -75,9 +76,14 @@ def train(
     varies during training. If `x_val`/`y_val` are given, `model.nll` on the
     validation set is recorded every `eval_every` steps (default: ~100 points
     spread over the run) and at the last step; `model` must expose
-    `.nll(x, y)` (LinearBigram and MLP both do).
+    `.nll(x, y)` (LinearBigram and MLP both do) and is responsible for
+    switching itself to eval mode there (MLP does, for its BatchNorm).
+    If `clip_grad` is set, the global gradient norm is clipped to that value
+    after each backward — a guard against loss spikes from noisy minibatches
+    at high lr (`torch.nn.utils.clip_grad_norm_`).
     """
     gen = torch.Generator().manual_seed(seed) if seed is not None else None
+    model.train()  # minibatch statistics for any BatchNorm (no-op otherwise)
     if x_val is not None and y_val is not None and eval_every is None:
         eval_every = max(1, steps // 100)
     train_losses: list[float] = []
@@ -90,6 +96,8 @@ def train(
             loss = model.loss(x[ix], y[ix])
         opt.zero_grad()
         loss.backward()
+        if clip_grad is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
         opt.step()
         if scheduler is not None:
             scheduler.step()
