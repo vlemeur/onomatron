@@ -26,6 +26,39 @@ def load_names(path: str | Path = DEFAULT_NAMES_PATH) -> list[str]:
     return names
 
 
+def split_names(
+    names: list[str],
+    ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
+    seed: int = 42,
+) -> tuple[list[str], list[str], list[str]]:
+    """Shuffle `names` with a seeded generator and split into (train, val, test).
+
+    The split happens on names, never on n-grams: n-grams of a single name are
+    correlated, so cutting at the pair level would leak between splits. Ratios
+    are normalized, so (8, 1, 1) works as well as (0.8, 0.1, 0.1).
+    """
+    total = sum(ratios)
+    if len(ratios) != 3 or min(ratios) < 0 or total <= 0:
+        raise ValueError("ratios must be 3 non-negative values summing to > 0")
+    frac = tuple(r / total for r in ratios)
+    gen = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(len(names), generator=gen).tolist()
+    n_train = int(frac[0] * len(names))
+    n_val = int(frac[1] * len(names))
+    train = [names[i] for i in perm[:n_train]]
+    val = [names[i] for i in perm[n_train : n_train + n_val]]
+    test = [names[i] for i in perm[n_train + n_val :]]
+    logger.info(
+        "split %d names into %d train / %d val / %d test (seed=%d)",
+        len(names),
+        len(train),
+        len(val),
+        len(test),
+        seed,
+    )
+    return train, val, test
+
+
 class Vocab:
     """Character <-> index mapping. The '.' sentinel is index 0 and marks
     both the beginning and the end of a name."""
