@@ -52,11 +52,12 @@ class LinearBigram(nn.Module):
 
     @torch.no_grad()
     def sample(
-        self, n: int = 10, seed: int | None = None, max_len: int = 40
+        self, n: int = 10, min_len: int = 3, seed: int | None = None, max_len: int = 40
     ) -> list[str]:
         """Sample n names with a rolling context of n-1 chars, padded with
         the sentinel at the start; draw until the sentinel comes back
-        (max_len as a runaway guard)."""
+        (max_len as a runaway guard). The sentinel is rejected until the
+        name reaches `min_len` chars."""
         gen = torch.Generator().manual_seed(seed) if seed is not None else None
 
         eos = self.vocab.stoi[SENTINEL]
@@ -74,7 +75,9 @@ class LinearBigram(nn.Module):
                     ).item()
                 )
                 if ix == eos:
-                    break
+                    if len(chars) >= min_len:
+                        break
+                    continue  # too short: reject eos, redraw same context
                 chars.append(self.vocab.itos[ix])
             out.append("".join(chars))
         return out

@@ -112,13 +112,30 @@ def train(
     return TrainHistory(train_losses, val)
 
 
-def plot_history(history: TrainHistory) -> None:
-    """Plot the training loss curve, with the validation NLL overlaid as
-    markers when the model was trained with validation tensors."""
-    plt.plot(history.train_losses, label="train")
+def plot_history(history: TrainHistory, smooth: int | None = None) -> None:
+    """Plot the training loss curve (blue), with the validation NLL overlaid
+    as orange markers when the model was trained with validation tensors.
+
+    With `smooth` > 1, the per-step losses are replaced by a rolling mean
+    over `smooth` steps — the raw minibatch curve is noisy.
+    """
+    losses = history.train_losses
+    if smooth is not None and 1 < smooth < len(losses):
+        window = (
+            torch.tensor(losses, dtype=torch.float32).unfold(0, smooth, 1).mean(dim=1)
+        )
+        centers = torch.arange(len(window)) + (smooth - 1) / 2
+        plt.plot(
+            centers.tolist(),
+            window.tolist(),
+            color="tab:blue",
+            label=f"train (rolling mean, w={smooth})",
+        )
+    else:
+        plt.plot(losses, color="tab:blue", label="train")
     if history.val:
         steps, nlls = zip(*history.val, strict=True)
-        plt.plot(steps, nlls, marker="o", label="val")
+        plt.plot(steps, nlls, marker="o", color="tab:orange", label="val")
     plt.xlabel("step")
     plt.ylabel("loss / NLL")
     plt.legend()
