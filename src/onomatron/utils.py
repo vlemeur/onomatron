@@ -24,20 +24,29 @@ def lr_range_test(
     y: torch.Tensor,
     lrs: list[float],
     steps: int = 100,
+    batch_size: int | None = None,
     seed: int = 42,
 ) -> list[float]:
-    """Final loss after `steps` full-batch SGD steps at each lr.
+    """Final loss after `steps` SGD steps at each lr.
 
+    Full-batch if `batch_size` is None, else random minibatches (drawn with a
+    generator seeded by `seed`) — prefer a minibatch here: it matches the real
+    training regime, and a full-batch test tends to overestimate the usable lr.
     `model_fn(seed)` must return a fresh model exposing `.loss(x, y)` and
-    `.parameters()` (e.g. LinearBigram, or an MLP class with the same
-    interface), so every lr starts from the same initialization.
+    `.parameters()` (e.g. LinearBigram, MLP, WaveNet), so every lr starts from
+    the same initialization.
     """
+    gen = torch.Generator().manual_seed(seed) if seed is not None else None
     losses: list[float] = []
     for lr in tqdm(lrs, desc="lr range test", unit="lr"):
         model = model_fn(seed)
         opt = torch.optim.SGD(model.parameters(), lr=lr)
         for _ in range(steps):
-            loss = model.loss(x, y)
+            if batch_size is None:
+                loss = model.loss(x, y)
+            else:
+                ix = torch.randint(0, x.shape[0], (batch_size,), generator=gen)
+                loss = model.loss(x[ix], y[ix])
             opt.zero_grad()
             loss.backward()
             opt.step()
