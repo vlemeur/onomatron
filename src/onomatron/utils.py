@@ -1,12 +1,21 @@
 """Shared training helpers for the notebooks (lr range test, training loop)."""
 
 from collections.abc import Callable
+from typing import NamedTuple
 
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 from tqdm import tqdm
+
+
+class TrainHistory(NamedTuple):
+    """What `train` returns: the per-step training loss, plus (step, val NLL)
+    pairs when validation tensors were provided (empty otherwise)."""
+
+    train_losses: list[float]
+    val: list[tuple[int, float]]
 
 
 def lr_range_test(
@@ -54,17 +63,26 @@ def train(
     batch_size: int | None = None,
     scheduler: LRScheduler | None = None,
     seed: int | None = None,
-) -> list[float]:
-    """Train `model` on (x, y); return the loss at each step.
+    x_val: torch.Tensor | None = None,
+    y_val: torch.Tensor | None = None,
+    eval_every: int | None = None,
+) -> TrainHistory:
+    """Train `model` on (x, y); return a TrainHistory.
 
     Full-batch if `batch_size` is None, else random minibatches drawn with a
     generator seeded by `seed`. `scheduler` must wrap `opt` (e.g. OneCycleLR
     with total_steps=steps) and is stepped after every update, so the lr
-    varies during training.
+    varies during training. If `x_val`/`y_val` are given, `model.nll` on the
+    validation set is recorded every `eval_every` steps (default: ~100 points
+    spread over the run) and at the last step; `model` must expose
+    `.nll(x, y)` (LinearBigram and MLP both do).
     """
     gen = torch.Generator().manual_seed(seed) if seed is not None else None
-    losses: list[float] = []
-    for _ in tqdm(range(steps), desc="train", unit="step"):
+    if x_val is not None and y_val is not None and eval_every is None:
+        eval_every = max(1, steps // 100)
+    train_losses: list[float] = []
+    val: list[tuple[int, float]] = []
+    for step in tqdm(range(steps), desc="train", unit="step"):
         if batch_size is None:
             loss = model.loss(x, y)
         else:
@@ -75,5 +93,24 @@ def train(
         opt.step()
         if scheduler is not None:
             scheduler.step()
-        losses.append(loss.item())
-    return losses
+        train_losses.append(loss.item())
+        if (
+            eval_every
+            and x_val is not None
+            and y_val is not None
+            and (step % eval_every == 0 or step == steps - 1)
+        ):
+            val.append((step, model.nll(x_val, y_val)))
+    return TrainHistory(train_losses, val)
+
+
+def plot_history(history: TrainHistory) -> None:
+    """Plot the training loss curve, with the validation NLL overlaid as
+    markers when the model was trained with validation tensors."""
+    plt.plot(history.train_losses, label="train")
+    if history.val:
+        steps, nlls = zip(*history.val, strict=True)
+        plt.plot(steps, nlls, marker="o", label="val")
+    plt.xlabel("step")
+    plt.ylabel("loss / NLL")
+    plt.legend()
