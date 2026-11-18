@@ -31,6 +31,11 @@ class LinearBigram(nn.Module):
                     torch.randn((self.n_vocab, self.n_vocab), generator=generator)
                 )
 
+    @property
+    def n_parameters(self) -> int:
+        """Number of trainable parameters (sum of numel over all parameters)."""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
     def forward(self, xenc: torch.Tensor) -> torch.Tensor:
         """One-hot context rows -> logits over the vocab."""
         return self.linear(xenc)

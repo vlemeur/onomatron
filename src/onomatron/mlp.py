@@ -51,6 +51,11 @@ class MLP(nn.Module):
         self.bn = nn.BatchNorm1d(h_dim) if batch_norm else None
         self.output = nn.Linear(h_dim, self.n_vocab)
 
+    @property
+    def n_parameters(self) -> int:
+        """Number of trainable parameters (sum of numel over all parameters)."""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Context indices (N, block_size) -> logits (N, n_vocab)."""
         emb = self.embedding(x)  # (N, block_size, emb_dim)
