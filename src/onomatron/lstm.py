@@ -1,5 +1,5 @@
-"""LTSM inspired by Generating Sequences With
-Recurrent Neural Networks Alex Graves 2014."""
+"""Character-level LSTM language model, inspired by Graves et al. 2014,
+"Generating Sequences With Recurrent Neural Networks"."""
 
 import logging
 
@@ -11,9 +11,14 @@ from onomatron.data import SENTINEL, Vocab
 
 logger = logging.getLogger(__name__)
 
+# (h, c) pair chained between steps during sampling; None = start from zeros.
+HCState = tuple[torch.Tensor, torch.Tensor]
+
 
 class LSTMName(nn.Module):
-    """TOBEDONE"""
+    """Embedding -> nn.LSTM -> Linear over the vocab. Predicts the next char at
+    every position of the sequence (loss over all positions); the final (h, c)
+    state is chained from one char to the next in sample()."""
 
     def __init__(
         self,
@@ -44,17 +49,19 @@ class LSTMName(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     def forward(
-        self, x: torch.Tensor, hc: tuple[torch.Tensor, torch.Tensor] | None = None
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        """Char indices (N, T) -> (logits (N, T, n_vocab), (h_n, c_n)).
+        self, x: torch.Tensor, hc: HCState | None = None
+    ) -> tuple[torch.Tensor, HCState]:
+        """Char indices (N, T) -> (logits (N, T, n_vocab), new (h, c) state).
 
-        `hc` is the (h, c) state to start from; None means zeros."""
+        `hc` is the (h, c) state to start from; None starts from zeros."""
         emb = self.embedding(x)
         out, hc_new = self.lstm(emb, hc)
         return self.output(out), hc_new
 
     def loss(self, x: torch.Tensor, ys: torch.Tensor) -> torch.Tensor:
-        """Cross-entropy over all position, ignoring the sentinel padding."""
+        """Cross-entropy over all positions. Padding targets are -100 (ignored
+        via cross_entropy's default ignore_index); the real end-of-name
+        sentinel (index 0) still counts."""
         logits, _ = self(x)
         return F.cross_entropy(
             logits.view(-1, self.n_vocab),
@@ -63,18 +70,15 @@ class LSTMName(nn.Module):
 
     @torch.no_grad()
     def nll(self, x: torch.Tensor, ys: torch.Tensor) -> float:
-        """Mean negative log-likelihood per example, directly comparable to
-        NGramModel.nll."""
+        """Mean NLL per non-padding token, directly comparable to NGramModel.nll."""
         return float(self.loss(x, ys))
 
     @torch.no_grad()
     def probs(
-        self, x: torch.Tensor, hc: tuple[torch.Tensor, torch.Tensor] | None = None
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        """P(next | prefix) at every position: (N, T, n_vocab).
-
-        Also returns the new (h, c) state, so sample() can chain calls:
-        p, hc_new = model.probs(tok, hc)."""
+        self, x: torch.Tensor, hc: HCState | None = None
+    ) -> tuple[torch.Tensor, HCState]:
+        """P(next | prefix) at every position, plus the new (h, c) state:
+        p, hc_new = model.probs(tok, hc)  # p: (N, T, n_vocab)."""
         logits, hc_new = self(x, hc)
         return F.softmax(logits, dim=-1), hc_new
 
@@ -82,7 +86,11 @@ class LSTMName(nn.Module):
     def sample(
         self, n: int = 10, min_len: int = 3, seed: int | None = None, max_len: int = 40
     ) -> list[str]:
-        """Sample n names"""
+        """Sample n names one char at a time, chaining the (h, c) state.
+
+        Starts from the sentinel and draws until it comes back (max_len as a
+        runaway guard); the sentinel is rejected until the name reaches
+        `min_len` chars."""
         gen = torch.Generator().manual_seed(seed) if seed is not None else None
         out: list[str] = []
         for _ in range(n):
