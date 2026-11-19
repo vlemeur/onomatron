@@ -1,4 +1,5 @@
-"""RNN inspired by Mikolov et al. 2010"""
+"""Character-level vanilla RNN language model, inspired by Mikolov et al.
+2010, "Recurrent neural network based language model"."""
 
 import logging
 
@@ -12,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 class RNNName(nn.Module):
-    """TOBEDONE"""
+    """Embedding -> nn.RNN -> Linear over the vocab. Predicts the next char at
+    every position of the sequence (loss over all positions); the final hidden
+    state h is chained from one char to the next in sample()."""
 
     def __init__(
         self,
@@ -42,15 +45,20 @@ class RNNName(nn.Module):
         """Number of trainable parameters (sum of numel over all parameters)."""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
-    def forward(self, x: torch.Tensor, h: torch.Tensor | None = None) -> torch.Tensor:
-        """"""
+    def forward(
+        self, x: torch.Tensor, h: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Char indices (N, T) -> (logits (N, T, n_vocab), new hidden state h).
+
+        `h` is the hidden state to start from; None starts from zeros."""
         emb = self.embedding(x)
-        # RNN output and hidden state
-        out, h_rnn = self.rnn(emb, h)
-        return self.output(out), h_rnn
+        out, h_new = self.rnn(emb, h)
+        return self.output(out), h_new
 
     def loss(self, x: torch.Tensor, ys: torch.Tensor) -> torch.Tensor:
-        """Cross-entropy over all position, ignoring the sentinel padding."""
+        """Cross-entropy over all positions. Padding targets are -100 (ignored
+        via cross_entropy's default ignore_index); the real end-of-name
+        sentinel (index 0) still counts."""
         logits, _ = self(x)
         return F.cross_entropy(
             logits.view(-1, self.n_vocab),
@@ -59,24 +67,27 @@ class RNNName(nn.Module):
 
     @torch.no_grad()
     def nll(self, x: torch.Tensor, ys: torch.Tensor) -> float:
-        """Mean negative log-likelihood per example, directly comparable to
-        NGramModel.nll."""
+        """Mean NLL per non-padding token, directly comparable to NGramModel.nll."""
         return float(self.loss(x, ys))
 
     @torch.no_grad()
-    def probs(self, x: torch.Tensor, h: torch.Tensor | None = None) -> torch.Tensor:
-        """P(next | prefix) at every position: (N, T, n_vocab).
-
-        Also returns the final hidden state, so sample() can chain calls:
-        p, h_new = model.probs(tok, h)."""
-        logits, h_rnn = self(x, h)
-        return F.softmax(logits, dim=-1), h_rnn
+    def probs(
+        self, x: torch.Tensor, h: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """P(next | prefix) at every position, plus the new hidden state:
+        p, h_new = model.probs(tok, h)  # p: (N, T, n_vocab)."""
+        logits, h_new = self(x, h)
+        return F.softmax(logits, dim=-1), h_new
 
     @torch.no_grad()
     def sample(
         self, n: int = 10, min_len: int = 3, seed: int | None = None, max_len: int = 40
     ) -> list[str]:
-        """Sample n names"""
+        """Sample n names one char at a time, chaining the hidden state h.
+
+        Starts from the sentinel and draws until it comes back (max_len as a
+        runaway guard); the sentinel is rejected until the name reaches
+        `min_len` chars."""
         gen = torch.Generator().manual_seed(seed) if seed is not None else None
         out: list[str] = []
         for _ in range(n):

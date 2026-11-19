@@ -1,5 +1,7 @@
 """Shared training helpers for the notebooks (lr range test, training loop)."""
 
+import copy
+import logging
 from collections.abc import Callable
 from typing import NamedTuple
 
@@ -10,13 +12,17 @@ from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 from tqdm import tqdm
 
+logger = logging.getLogger(__name__)
+
 
 class TrainHistory(NamedTuple):
     """What `train` returns: the per-step training loss, plus (step, val NLL)
-    pairs when validation tensors were provided (empty otherwise)."""
+    pairs when validation tensors were provided (empty otherwise), plus
+    `best` = (step, val NLL) of the best checkpoint (None without val)."""
 
     train_losses: list[float]
     val: list[tuple[int, float]]
+    best: tuple[int, float] | None = None
 
 
 def lr_range_test(
@@ -128,6 +134,7 @@ def train(
     y_val: torch.Tensor | None = None,
     eval_every: int | None = None,
     clip_grad: float | None = None,
+    patience: int | None = None,
 ) -> TrainHistory:
     """Train `model` on (x, y); return a TrainHistory.
 
@@ -142,6 +149,11 @@ def train(
     If `clip_grad` is set, the global gradient norm is clipped to that value
     after each backward — a guard against loss spikes from noisy minibatches
     at high lr (`torch.nn.utils.clip_grad_norm_`).
+    With `patience` set and validation tensors given, training stops after
+    `patience` consecutive val evaluations without improvement, and the best
+    weights (lowest val NLL) are restored into `model` before returning:
+    early stopping + best-checkpoint restore. `history.best` then holds
+    (step, val NLL) of that checkpoint.
     """
     gen = torch.Generator().manual_seed(seed) if seed is not None else None
     model.train()  # minibatch statistics for any BatchNorm (no-op otherwise)
@@ -149,6 +161,9 @@ def train(
         eval_every = max(1, steps // 100)
     train_losses: list[float] = []
     val: list[tuple[int, float]] = []
+    best: tuple[int, float] | None = None
+    best_state: dict[str, torch.Tensor] | None = None
+    bad_evals = 0
     for step in tqdm(range(steps), desc="train", unit="step"):
         if batch_size is None:
             loss = model.loss(x, y)
@@ -169,8 +184,25 @@ def train(
             and y_val is not None
             and (step % eval_every == 0 or step == steps - 1)
         ):
-            val.append((step, model.nll(x_val, y_val)))
-    return TrainHistory(train_losses, val)
+            val_nll = model.nll(x_val, y_val)
+            val.append((step, val_nll))
+            if best is None or val_nll < best[1]:
+                best = (step, val_nll)
+                best_state = copy.deepcopy(model.state_dict())
+                bad_evals = 0
+            else:
+                bad_evals += 1
+                if patience is not None and bad_evals >= patience:
+                    logger.info(
+                        "early stopping at step %d (best val NLL %.4f at step %d)",
+                        step,
+                        best[1],
+                        best[0],
+                    )
+                    break
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    return TrainHistory(train_losses, val, best)
 
 
 def plot_history(history: TrainHistory, smooth: int | None = None) -> None:
