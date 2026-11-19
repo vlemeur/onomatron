@@ -23,15 +23,15 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from onomatron.normalize import (
+from onomatron.scraper import extract, hf_datasets, sources, sparql_queries
+from onomatron.scraper.fetch import HuggingFaceClient, SparqlClient, WikipediaClient
+from onomatron.scraper.models import CharacterName, SourceSpec
+from onomatron.scraper.normalize import (
     clean_name,
     dedupe_names,
     is_name_like,
     sanitize_for_model,
 )
-from onomatron.scraper import extract, hf_datasets, sources, sparql_queries
-from onomatron.scraper.fetch import HuggingFaceClient, SparqlClient, WikipediaClient
-from onomatron.scraper.models import CharacterName, SourceSpec
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
