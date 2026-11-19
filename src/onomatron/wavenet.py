@@ -14,7 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 class WaveNet(nn.Module):
-    """TO BE DONE"""
+    """Simplified WaveNet (van Oord et al. 2016): a stack of levels, each
+    halving the time axis and doubling the channel axis — Linear + LayerNorm
+    + tanh, then adjacent positions folded pairwise — followed by a Linear
+    output over the vocab. Unlike the full WaveNet: no dilation, no residual
+    or skip connections, no strict causality (see dilated_wavenet.py)."""
 
     def __init__(
         self,
@@ -59,7 +63,7 @@ class WaveNet(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TO BE DONE"""
+        """Context indices (N, block_size) -> logits (N, n_vocab)."""
         h = self.embedding(x)
         for level in self.levels:
             h = level(h)

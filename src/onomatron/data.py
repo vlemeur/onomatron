@@ -85,3 +85,23 @@ def make_ngram_pairs(names: list[str], vocab: Vocab, n: int) -> torch.Tensor:
         windows = zip(*(chs[i:] for i in range(n)), strict=False)
         pairs.extend(tuple(vocab.stoi[c] for c in w) for w in windows)
     return torch.tensor(pairs, dtype=torch.int64)
+
+
+def make_sequences(names: list[str], vocab: Vocab) -> tuple[torch.Tensor, torch.Tensor]:
+    """Each name as one full sequence: [SENTINEL] + chars + [SENTINEL],
+    right-padded up to the longest sequence. Returns (x, y) of shape (N, T):
+    x = seq[:-1] (inputs), y = seq[1:] (next-char targets). x is padded with
+    SENTINEL (index 0, a valid embedding row); y is padded with -100 so the
+    loss ignores padding (cross_entropy's default ignore_index) while the real
+    end-of-name SENTINEL target (index 0) still counts."""
+    seqs = [
+        [vocab.stoi[SENTINEL]] + [vocab.stoi[c] for c in name] + [vocab.stoi[SENTINEL]]
+        for name in names
+    ]
+    t_max = max(len(s) for s in seqs)
+    x = torch.full((len(seqs), t_max), vocab.stoi[SENTINEL], dtype=torch.int64)
+    y = torch.full((len(seqs), t_max), -100, dtype=torch.int64)
+    for i, s in enumerate(seqs):
+        x[i, : len(s) - 1] = torch.tensor(s[:-1], dtype=torch.int64)
+        y[i, : len(s) - 1] = torch.tensor(s[1:], dtype=torch.int64)
+    return x, y
