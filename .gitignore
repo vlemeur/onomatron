@@ -28,7 +28,7 @@ data/*
 !data/external/
 data/external/*
 !data/external/.gitkeep
-models/
+/models/
 *.pt
 
 # Notebook checkpoints
