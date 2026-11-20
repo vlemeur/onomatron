@@ -39,41 +39,40 @@ def get_model(source: str):
 
 def main() -> None:
     st.set_page_config(page_title="onomatron", page_icon="📖")
-    st.title("onomatron — générateur de noms de personnages")
+    st.title("onomatron — character name generator")
     st.caption(
-        "Modèles caractère par caractère entraînés sur des noms de la "
-        "littérature française (voir les repos HF publiés)."
+        "Character-level models trained on French literature character names "
+        "(see the published HF repos)."
     )
 
     local = sorted(p.name for p in MODELS_DIR.iterdir()) if MODELS_DIR.is_dir() else []
     choice = st.selectbox(
-        "Modèle",
+        "Model",
         local + [HF_OPTION],
-        help=f"bundles locaux dans {MODELS_DIR}, ou un repo HF",
+        help=f"local bundles in {MODELS_DIR}, or a HF repo",
     )
     if choice == HF_OPTION:
         choice = "hf:" + st.text_input(
-            "Repo HF", value="", placeholder="namespace/onomatron-transformer"
+            "HF repo", value="", placeholder="namespace/onomatron-transformer"
         )
     if not choice:
         st.info(
-            "Choisis un modèle (exporte d'abord avec "
-            "`scripts/publish_hf.py --mode export`)."
+            "Pick a model (export first with `scripts/publish_hf.py --mode export`)."
         )
         return
 
-    n = st.slider("Nombre de noms", 1, 200, 20)
+    n = st.slider("Number of names", 1, 200, 20)
     seed = st.number_input("Seed", value=42, step=1)
-    min_len = st.slider("Longueur min", 1, 10, 3)
-    max_len = st.slider("Longueur max", 5, 40, 40)
+    min_len = st.slider("Min length", 1, 10, 3)
+    max_len = st.slider("Max length", 5, 40, 40)
 
-    if st.button("Générer", type="primary"):
-        with st.spinner("Génération…"):
+    if st.button("Generate", type="primary"):
+        with st.spinner("Generating…"):
             net, config = get_model(choice)
             names = net.sample(n=n, min_len=min_len, seed=int(seed), max_len=max_len)
-        st.subheader(f"{len(names)} noms (seed={seed})")
+        st.subheader(f"{len(names)} names (seed={seed})")
         st.code("\n".join(names), language=None)
-        st.caption(f"modèle={config['model']} · params={config['params']}")
+        st.caption(f"model={config['model']} · params={config['params']}")
 
 
 if __name__ == "__main__":

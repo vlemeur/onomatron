@@ -38,24 +38,24 @@ def generate(repo_id: str, n: int, seed: float, min_len: int, max_len: int):
 with gr.Blocks(title="onomatron") as demo:
     gr.Markdown(
         "# onomatron 📖\n"
-        "Génère des **noms de personnages de la littérature française** avec un "
-        "modèle de langage caractère par caractère entraîné from scratch "
-        "(esprit [makemore](https://github.com/karpathy/makemore))."
+        "Generates **names of characters from French literature** with a "
+        "from-scratch character-level language model "
+        "([makemore](https://github.com/karpathy/makemore) spirit)."
     )
     repo = gr.Textbox(
         label="Model repo",
         value=DEFAULT_REPO,
         placeholder="<namespace>/onomatron-<model>",
-        info=("Repo HF publié par onomatron (variable ONOMATRON_MODEL_REPO)."),
+        info="Published by onomatron (ONOMATRON_MODEL_REPO Space variable).",
     )
     with gr.Row():
-        n = gr.Slider(1, 200, value=20, step=1, label="Nombre de noms")
+        n = gr.Slider(1, 200, value=20, step=1, label="Number of names")
         seed = gr.Number(value=42, label="Seed", precision=0)
     with gr.Row():
-        min_len = gr.Slider(1, 10, value=3, step=1, label="Longueur min")
-        max_len = gr.Slider(5, 40, value=40, step=1, label="Longueur max")
-    btn = gr.Button("Générer", variant="primary")
-    out = gr.Textbox(label="Noms générés", lines=14)
+        min_len = gr.Slider(1, 10, value=3, step=1, label="Min length")
+        max_len = gr.Slider(5, 40, value=40, step=1, label="Max length")
+    btn = gr.Button("Generate", variant="primary")
+    out = gr.Textbox(label="Generated names", lines=14)
     meta = gr.Markdown()
     btn.click(generate, inputs=[repo, n, seed, min_len, max_len], outputs=[out, meta])
 
