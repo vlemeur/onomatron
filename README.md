@@ -1,5 +1,7 @@
 # onomatron
 
+[![CI](https://github.com/vlemeur/onomatron/actions/workflows/ci.yml/badge.svg)](https://github.com/vlemeur/onomatron/actions/workflows/ci.yml)
+
 A character-level language model that generates names of characters from French
 literature, from the classics to the modern era — from scratch, in the spirit of
 Karpathy's [makemore](https://github.com/karpathy/makemore) and his

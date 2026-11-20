@@ -67,5 +67,16 @@ jobs:
         run: uv sync --locked
       # The suite is fully offline: fixtures are built in-memory, bundles are
       # written to tmp_path — no network access needed.
-      - name: Run tests
-        run: uv run --locked pytest
+      - name: Run tests with coverage
+        run: uv run --locked pytest --cov --cov-report=term-missing --cov-report=xml:coverage.xml --cov-report=html:htmlcov
+      # Downloadable from the run's "Artifacts" section: coverage.xml (for
+      # external reporters) + htmlcov/ (browsable line-by-line report).
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: error
+          retention-days: 30
