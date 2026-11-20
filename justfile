@@ -31,3 +31,17 @@ all:
     just lint
     just type-check
     just check
+
+# Scrape character names from Wikipedia/Wikidata/HF into data/processed/names.txt (network)
+scrape:
+    uv run --locked python scripts/run_scraper.py
+
+# Benchmark + hyperparameter tuning; extra args are forwarded, e.g.:
+#   just bench                                (script defaults: --mode all --trials 30)
+#   just bench --trials 50 --models mlp wavenet
+bench *args:
+    uv run --locked python scripts/benchmark.py {{args}}
+
+# MLflow UI on the benchmark tracking DB (http://127.0.0.1:5000)
+bench-ui:
+    uv run --locked mlflow ui --backend-store-uri sqlite:///data/benchmark/mlflow.db
