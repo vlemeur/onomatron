@@ -43,11 +43,21 @@ include = ["onomatron", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.coverage.run]
+source = ["src/onomatron"]
+# Network-only code: not covered by the offline test suite (fetch.py talks to
+# Wikipedia/Wikidata/HF, publish/ to the Hub) — mock them before measuring.
+omit = ["*/scraper/fetch.py", "*/publish/*"]
+
+[tool.coverage.report]
+show_missing = true
+
 [dependency-groups]
 dev = [
     "jupyter>=1.1.1",
     "prek>=0.5.10",
     "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.17.3",
     "streamlit>=1.40.0",
     "ty>=0.0.97",
