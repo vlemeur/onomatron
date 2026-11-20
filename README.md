@@ -32,8 +32,7 @@ Names are split **by name** (seed 42) into train/val/test = 80/10/10; the test
 split is touched exactly once, in the final evaluation. Everything is tracked in
 MLflow under `data/benchmark/`.
 
-A local generation UI (Streamlit) is in `scripts/app_streamlit.py`; a Gradio Space
-lives in `space/`.
+A local generation UI (Streamlit) is in `scripts/app_streamlit.py`.
 
 ## Dataset
 

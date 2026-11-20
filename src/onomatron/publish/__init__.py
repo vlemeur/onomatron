@@ -6,19 +6,17 @@ Two stages (see scripts/publish_hf.py):
   under ``data/benchmark/`` by the benchmark, select the top-N models by
   **val NLL** (the test split is never used for selection), and assemble
   under ``data/hf/``: one self-contained bundle + model card per model, the
-  dataset + its card, the benchmark results + tracking DBs, and the Space;
+  dataset + its card, and the benchmark results + tracking DBs;
 - **push**: upload the prepared tree to HF repos with huggingface_hub
-  (dataset / model / space), token from ``HF_TOKEN``.
+  (dataset / model), token from ``HF_TOKEN`` or `hf auth login`.
 
 Repo layout for namespace ``<ns>``:
 ``<ns>/onomatron-names`` (dataset), ``<ns>/onomatron-benchmark`` (results +
-mlflow.db + optuna.db), ``<ns>/onomatron-<model>`` per top model,
-``<ns>/onomatron-space`` (Gradio demo).
+mlflow.db + optuna.db), ``<ns>/onomatron-<model>`` per top model.
 """
 
 import json
 import logging
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -31,27 +29,9 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["run"]
 
-SPACE_SRC = Path(__file__).resolve().parents[3] / "space"
-
 
 def _repo(namespace: str | None, name: str) -> str:
     return f"{namespace}/{name}" if namespace else f"<namespace>/{name}"
-
-
-def _assemble_space(
-    out_dir: Path, namespace: str | None, model_names: list[str], best_repo: str
-) -> Path:
-    """Copy the repo's space/ into out_dir, vendor the onomatron subset with
-    every published model, and write the Space README."""
-    if not SPACE_SRC.is_dir():
-        raise FileNotFoundError(f"missing {SPACE_SRC} — run from the repo root")
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    for name in ("app.py", "requirements.txt"):
-        shutil.copy(SPACE_SRC / name, out / name)
-    export.vendor_onomatron(out, model_names)
-    cards.make_space_card(best_repo).save(out / "README.md")
-    return out
 
 
 def run(
@@ -66,7 +46,8 @@ def run(
     """Export (and optionally push) the publishable artifacts.
 
     mode="export" is local-only; mode="push" additionally uploads to HF and
-    requires `namespace` + HF_TOKEN. Returns a small summary dict.
+    requires `namespace` + a token (HF_TOKEN or `hf auth login`).
+    Returns a small summary dict.
     """
     if mode not in ("export", "push"):
         raise ValueError(f"unknown mode {mode!r}")
@@ -114,11 +95,6 @@ def run(
         stats, dataset_repo=dataset_repo, benchmark_repo=benchmark_repo
     ).save(ds_dir / "README.md")
 
-    best_repo = _repo(namespace, f"onomatron-{top[0].model}")
-    space_dir = _assemble_space(
-        out / "space", namespace, [r.model for r in top], best_repo
-    )
-
     summary: dict[str, Any] = {
         "out_root": str(out),
         "n_runs": len(runs),
@@ -126,7 +102,6 @@ def run(
         "bundles": {m: str(p) for m, p in bundles.items()},
         "dataset_dir": str(ds_dir),
         "benchmark_dir": str(bench_dir),
-        "space_dir": str(space_dir),
         "pushed": [],
     }
     if mode == "push":
@@ -135,7 +110,6 @@ def run(
             push.publish_dataset(api, namespace, ds_dir),
             push.publish_benchmark(api, namespace, bench_dir),
             *(push.publish_model(api, namespace, m, p) for m, p in bundles.items()),
-            push.publish_space(api, namespace, space_dir, best_repo),
         ]
         logger.info("pushed: %s", summary["pushed"])
     (out / "manifest.json").write_text(

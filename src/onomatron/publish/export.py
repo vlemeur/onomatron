@@ -204,7 +204,7 @@ def select_top_n(
 def vendor_onomatron(dest: str | Path, model_names: list[str]) -> Path:
     """Copy the minimal onomatron subset able to load/sample `model_names`
     into ``dest/onomatron/`` — torch-only: no plotly, optuna, mlflow or
-    scraper deps, so published repos and Spaces stay light."""
+    scraper deps, so published model repos stay light."""
     import onomatron
 
     src = Path(onomatron.__file__).resolve().parent

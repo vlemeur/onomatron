@@ -11,8 +11,7 @@ Push (needs HF_TOKEN with write access + a namespace):
 
 Requires the benchmark to have run at least in eval mode (MLflow runs under
 data/benchmark/). Repos created: <namespace>/onomatron-names (dataset),
-onomatron-benchmark (results + tracking DBs), onomatron-<model> per top
-model, onomatron-space (Gradio demo).
+onomatron-benchmark (results + tracking DBs), onomatron-<model> per top model.
 """
 
 import argparse

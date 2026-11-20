@@ -42,7 +42,6 @@ include = ["onomatron", "tests"]
 
 [dependency-groups]
 dev = [
-    "gradio>=5.0.0",
     "jupyter>=1.1.1",
     "prek>=0.5.10",
     "ruff>=0.17.3",

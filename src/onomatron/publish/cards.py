@@ -2,19 +2,18 @@
 templates (templates/*.md.j2 at the repo root — the standard way to template
 markdown; huggingface_hub's own card templates are Jinja2 as well).
 
-Metadata goes into `card.data` (ModelCardData / DatasetCardData / SpaceCardData)
-and is rendered as the YAML frontmatter by the library itself; the markdown
-body is rendered from the .j2 template into `card.text`. Makers return the
-card object — callers persist it with `card.save(path)`. Generating the cards
-from the MLflow export guarantees the published numbers are exactly the
-tracked ones.
+Metadata goes into `card.data` (ModelCardData / DatasetCardData) and is
+rendered as the YAML frontmatter by the library itself; the markdown body is
+rendered from the .j2 template into `card.text`. Makers return the card object
+— callers persist it with `card.save(path)`. Generating the cards from the
+MLflow export guarantees the published numbers are exactly the tracked ones.
 """
 
 from pathlib import Path
 from typing import Any
 
 import jinja2
-from huggingface_hub import DatasetCard, ModelCard, SpaceCard
+from huggingface_hub import DatasetCard, ModelCard
 
 from onomatron.publish.export import KIND_LICENSES, EvalRun, _coerce
 
@@ -161,22 +160,4 @@ def make_dataset_card(
         kind_rows=kind_rows,
         src_rows=src_rows,
     )
-    return card
-
-
-def make_space_card(model_repo: str) -> SpaceCard:
-    """SpaceCard of the Gradio demo (saved as the Space's README.md; the sdk
-    and app_file metadata drive the Space build)."""
-    card = _card(
-        SpaceCard,
-        title="onomatron",
-        emoji="📖",
-        colorFrom="blue",
-        colorTo="purple",
-        sdk="gradio",
-        app_file="app.py",
-        pinned=False,
-        license="mit",
-    )
-    card.text = _render("space.md.j2", model_repo=model_repo)
     return card

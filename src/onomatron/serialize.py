@@ -10,7 +10,7 @@ A bundle is a directory holding exactly two files:
 ``load_bundle`` rebuilds the exact model from a bundle directory, and
 ``load_bundle_from_hub`` downloads one from a HF model repo. Only torch and
 this package are needed — no optuna/mlflow/benchmark imports, so the same
-code runs inside a HF model repo or Space with a minimal vendored copy of
+code runs inside a published HF model repo with a minimal vendored copy of
 ``onomatron`` (see ``onomatron.publish.export.vendor_onomatron``).
 """
 
