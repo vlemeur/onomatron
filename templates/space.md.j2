@@ -1,0 +1,9 @@
+# onomatron
+
+Generate **names of characters from French literature** with a from-scratch
+character-level language model (makemore-style), served from
+[{{ model_repo }}](https://huggingface.co/{{ model_repo }}).
+
+The Space loads the model repo set in the `ONOMATRON_MODEL_REPO` variable
+(published by `scripts/publish_hf.py --mode push`). Pick a seed to reproduce a
+generation exactly.

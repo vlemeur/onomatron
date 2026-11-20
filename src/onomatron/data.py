@@ -69,6 +69,15 @@ class Vocab:
         self.stoi[SENTINEL] = 0
         self.itos: dict[int, str] = {i: s for s, i in self.stoi.items()}
 
+    @classmethod
+    def from_stoi(cls, stoi: dict[str, int]) -> Vocab:
+        """Rebuild a Vocab from a persisted stoi mapping (e.g. the config.json
+        of a published model bundle), without the original names."""
+        vocab = cls.__new__(cls)
+        vocab.stoi = dict(stoi)
+        vocab.itos = {i: s for s, i in vocab.stoi.items()}
+        return vocab
+
     def __len__(self) -> int:
         return len(self.stoi)
 

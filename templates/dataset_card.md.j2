@@ -1,0 +1,62 @@
+# {{ dataset_repo }}
+
+**{{ stats["n_names"] }}** sanitized character names from French literature (one
+per line, `names.txt`), used to train the onomatron character-level name
+generators. Built by scraping Wikipedia / Wikidata / Hugging Face, then
+filtered and deduplicated by `onomatron.scraper.normalize`.
+
+## Contents
+
+- `names.txt` — one name per line, sorted, lowercase, latin letters only
+- `dataset_stats.json` — machine-readable stats + per-source provenance
+
+## Statistics
+
+| | |
+|---|---|
+| names (after sanitize + dedupe) | {{ stats["n_names"] }} |
+| candidates before sanitize/dedupe | {{ stats["n_candidates"] }} |
+| alphabet | `{{ alphabet }}` (+ `.` sentinel added by the models) |
+| length min / mean / max | {{ stats["len_min"] }} / {{ "%.1f" | format(stats["len_mean"]) }} / {{ stats["len_max"] }} |
+
+## Provenance
+
+Per scrape source (`data/interim/<source>.jsonl` line counts):
+
+| source | kind | target | candidates |
+|---|---|---|---|
+{% for s in src_rows %}| `{{ s["source"] }}` | {{ s["kind"] }} | `{{ s["target"] }}` | {{ s["count"] }} |
+{% endfor %}
+
+By source kind:
+
+| kind | candidates | origin | license | note |
+|---|---|---|---|---|
+{% for k in kind_rows %}| {{ k["kind"] }} | {{ k["count"] }} | {{ k["origin"] }} | {{ k["license"] }} | {{ k["note"] }} |
+{% endfor %}
+
+## Normalization
+
+Pipeline (`onomatron.scraper.normalize`): `clean_name` → `is_name_like` →
+`dedupe_names` (case-insensitive, first occurrence wins — sources are ordered
+so Wikipedia beats external sources on duplicates) → `sanitize_for_model`
+(lowercase, split full names on spaces, drop anything with digits/symbols,
+latin letters only). Only the final `names.txt` is sanitized; the consolidated
+`data/interim/names.jsonl` keeps the original forms.
+
+## Splits
+
+The benchmark splits **by name** (never by n-gram) into train/val/test =
+80/10/10 with seed 42 (`onomatron.data.split_names`). Full protocol and
+results: [onomatron-benchmark](https://huggingface.co/{{ benchmark_repo }}).
+
+## License
+
+`other`: individual names are facts, but the sources declare different
+licenses and two families declare none (see the kind table above).
+Wikipedia-derived content is CC BY-SA 4.0 (attribute "Wikipédia,
+contributeurs"); Wikidata content is CC0. {% include "_obtic.md.j2" %}
+
+## Citation
+
+{% include "_biblio.md.j2" %}
