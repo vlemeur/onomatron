@@ -51,3 +51,21 @@ jobs:
         run: uv run --locked prek run end-of-file-fixer --all-files
       - name: trim trailing whitespace
         run: uv run --locked prek run trailing-whitespace --all-files
+
+  pytest:
+    name: pytest — test suite (local, no network)
+    # Same pinned runner as the prek job (see above).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      # Reproducible environment: Python pinned by .python-version (3.14),
+      # dependencies pinned by uv.lock (--locked fails if the lock is stale).
+      - name: Sync locked environment
+        run: uv sync --locked
+      # The suite is fully offline: fixtures are built in-memory, bundles are
+      # written to tmp_path — no network access needed.
+      - name: Run tests
+        run: uv run --locked pytest

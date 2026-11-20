@@ -34,6 +34,7 @@ check:
 all:
     just lint
     just type-check
+    just test
     just check
 
 # Scrape character names from Wikipedia/Wikidata/HF into data/processed/names.txt (network)

@@ -49,7 +49,11 @@ class TransformerName(nn.Module):
             dropout=0.0,  # no dropout inside the encoder layer (MPS)
             batch_first=True,
         )
-        self.emb_drop = nn.Dropout(0.1)  # dropout on the summed embeddings
+        # The model's only regularization: 0.1 dropout on the summed
+        # token+position embeddings (a plain nn.Dropout works on MPS, unlike
+        # the encoder layer's). Fixed value, deliberately not Optuna-swept —
+        # ablate against 0.0 before changing it.
+        self.emb_drop = nn.Dropout(0.1)
         self.encoder = nn.TransformerEncoder(layer, num_layers=self.n_layer)
 
         self.ln_f = nn.LayerNorm(self.n_emb)
