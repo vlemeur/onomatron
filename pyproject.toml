@@ -1,6 +1,6 @@
 [project]
 name = "onomatron"
-version = "0.1.0"
+version = "0.2.0"
 description = "Character-level generation of French literature character names, makemore-style, up to a from-scratch decoder-only transformer in PyTorch"
 readme = "README.md"
 authors = [
