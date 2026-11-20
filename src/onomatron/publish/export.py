@@ -178,6 +178,15 @@ def arch_params(run: EvalRun) -> dict[str, Any]:
     return {k: _coerce(v) for k, v in run.params.items() if k not in skip}
 
 
+def best_model_name(cfg: BenchmarkConfig | None = None) -> str:
+    """Name of the best model of the local benchmark state (lowest val NLL)."""
+    cfg = cfg or BenchmarkConfig()
+    top = select_top_n(load_eval_runs(cfg), 1)
+    if not top:
+        raise RuntimeError("no eval run found — run the benchmark first")
+    return top[0].model
+
+
 def select_top_n(
     runs: list[EvalRun], n: int, models: list[str] | None = None
 ) -> list[EvalRun]:
