@@ -26,6 +26,7 @@ uv sync --locked
 just scrape          # build the dataset (network)
 just bench           # tune + evaluate all models
 just bench-ui        # MLflow UI on http://127.0.0.1:5000
+just run             # local UI on the best published model (fetched from the Hub)
 ```
 
 Names are split **by name** (seed 42) into train/val/test = 80/10/10; the test

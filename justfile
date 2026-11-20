@@ -45,3 +45,7 @@ bench *args:
 # MLflow UI on the benchmark tracking DB (http://127.0.0.1:5000)
 bench-ui:
     uv run --locked mlflow ui --backend-store-uri sqlite:///data/benchmark/mlflow.db
+
+# Local Streamlit UI on the best published model (fetched from the Hub at launch)
+run:
+    uv run --locked streamlit run scripts/app_streamlit.py
