@@ -135,6 +135,7 @@ def train(
     eval_every: int | None = None,
     clip_grad: float | None = None,
     patience: int | None = None,
+    on_eval: Callable[[int, float], None] | None = None,
 ) -> TrainHistory:
     """Train `model` on (x, y); return a TrainHistory.
 
@@ -153,7 +154,10 @@ def train(
     `patience` consecutive val evaluations without improvement, and the best
     weights (lowest val NLL) are restored into `model` before returning:
     early stopping + best-checkpoint restore. `history.best` then holds
-    (step, val NLL) of that checkpoint.
+    (step, val NLL) of that checkpoint. `on_eval`, when given, is called with
+    (step, val NLL) after every validation evaluation — a hook for external
+    consumers such as an Optuna pruner, which may raise (e.g. TrialPruned) to
+    abort the run early; the exception propagates out of `train`.
     """
     gen = torch.Generator().manual_seed(seed) if seed is not None else None
     model.train()  # minibatch statistics for any BatchNorm (no-op otherwise)
@@ -168,7 +172,9 @@ def train(
         if batch_size is None:
             loss = model.loss(x, y)
         else:
-            ix = torch.randint(0, x.shape[0], (batch_size,), generator=gen)
+            # indices are drawn on CPU (generator lives there) but must sit on
+            # the same device as x for the indexing to work (MPS/CUDA)
+            ix = torch.randint(0, x.shape[0], (batch_size,), generator=gen).to(x.device)
             loss = model.loss(x[ix], y[ix])
         opt.zero_grad()
         loss.backward()
@@ -186,6 +192,8 @@ def train(
         ):
             val_nll = model.nll(x_val, y_val)
             val.append((step, val_nll))
+            if on_eval is not None:
+                on_eval(step, val_nll)  # may raise (e.g. optuna.TrialPruned)
             if best is None or val_nll < best[1]:
                 best = (step, val_nll)
                 best_state = copy.deepcopy(model.state_dict())
