@@ -4,7 +4,7 @@
     # or: uv run streamlit run scripts/app_streamlit.py
 
 The default repo is the benchmark's best model (lowest val NLL) published under
-the ONOMATRON_NAMESPACE namespace (default: Jig09); the weights are fetched from
+the ONOMATRON_NAMESPACE namespace (default: vlemeur); the weights are fetched from
 the Hub at launch (then cached). Override the repo in the text field.
 """
 
@@ -23,7 +23,7 @@ except ImportError as e:
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
 
-NAMESPACE = os.environ.get("ONOMATRON_NAMESPACE", "Jig09")
+NAMESPACE = os.environ.get("ONOMATRON_NAMESPACE", "vlemeur")
 FALLBACK_MODEL = "rnn"
 
 
@@ -64,7 +64,7 @@ def main() -> None:
 
     if st.button("Generate", type="primary"):
         if not repo.strip():
-            st.info("Enter a HF model repo, e.g. Jig09/onomatron-rnn")
+            st.info("Enter a HF model repo, e.g. vlemeur/onomatron-rnn")
             return
         with st.spinner("Fetching model + generating…"):
             net, config = get_model(repo.strip())

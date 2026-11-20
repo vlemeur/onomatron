@@ -1,4 +1,4 @@
-"""Character-level Transformer model, inspired by Vaswany et al. 2017,
+"""Character-level Transformer model, inspired by Vaswani et al. 2017,
 "Attention Is All You Need"."""
 
 import logging
@@ -13,15 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 class TransformerName(nn.Module):
-    """Embedding -> nn.GRU -> Linear over the vocab. Predicts the next char at
-    every position of the sequence (loss over all positions); the final hidden
-    state h is chained from one char to the next in sample()."""
+    """Token + position embeddings -> embedding dropout -> TransformerEncoder
+    with a causal mask -> LayerNorm -> Linear head over the vocab. Predicts the
+    next char at every position of the sequence (loss over all positions).
+
+    Stateless, unlike the recurrent models: sample() re-runs the whole context
+    through the encoder at every generated char (O(T^2) per name) — there is
+    no hidden state to chain."""
 
     def __init__(
         self,
         vocab: Vocab,
-        block_size: int,  # max number of position
-        n_emb: int = 64,  # embeding dimension
+        block_size: int,  # max number of positions (context window)
+        n_emb: int = 64,  # embedding dimension
         n_head: int = 4,  # number of heads for multi head attention
         n_layer: int = 2,  # number of transformer encoder layers
         seed: int | None = None,
@@ -42,10 +46,10 @@ class TransformerName(nn.Module):
             d_model=self.n_emb,
             nhead=self.n_head,
             dim_feedforward=4 * self.n_emb,
-            dropout=0.0,  # No dropout on MPS
+            dropout=0.0,  # no dropout inside the encoder layer (MPS)
             batch_first=True,
         )
-        self.emb_drop = nn.Dropout(0.1)
+        self.emb_drop = nn.Dropout(0.1)  # dropout on the summed embeddings
         self.encoder = nn.TransformerEncoder(layer, num_layers=self.n_layer)
 
         self.ln_f = nn.LayerNorm(self.n_emb)
@@ -57,7 +61,9 @@ class TransformerName(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """"""
+        """Char indices (N, T) -> logits (N, T, n_vocab). Causal: the
+        upper-triangular -inf mask keeps position t from attending to
+        positions > t, so no future leaks into the prediction."""
         T = x.shape[1]
         pos = torch.arange(T, device=x.device)
         h = self.emb_drop(self.tok_emb(x) + self.pos_emb(pos))
@@ -88,21 +94,28 @@ class TransformerName(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        """P(next | prefix) at every position, plus the new hidden state:
-        p, h_new = model.probs(tok, h)  # p: (N, T, n_vocab)."""
+        """P(next | prefix) at every position:
+        p = model.probs(x)  # p: (N, T, n_vocab)."""
         logits = self(x)
         return F.softmax(logits, dim=-1)
 
     @torch.no_grad()
     def sample(
-        self, n: int = 10, min_len: int = 3, seed: int | None = None, max_len: int = 40
+        self,
+        n: int = 10,
+        min_len: int = 3,
+        seed: int | None = None,
+        max_len: int | None = None,
     ) -> list[str]:
-        """Sample n names one char at a time, chaining the hidden state h.
+        """Sample n names one char at a time.
 
-        Starts from the sentinel and draws until it comes back (max_len as a
-        runaway guard); the sentinel is rejected until the name reaches
-        `min_len` chars."""
-        if max_len is None:
+        Starts from the sentinel and draws until it comes back; the sentinel
+        is rejected until the name reaches `min_len` chars. The whole context
+        is re-run through the encoder at every step (O(T^2) per name, no
+        cached state), and T cannot exceed block_size (pos_emb has block_size
+        rows), so max_len is capped at block_size - 1 (the default when
+        max_len is None)."""
+        if max_len is None or max_len > self.block_size - 1:
             max_len = self.block_size - 1
 
         gen = torch.Generator().manual_seed(seed) if seed is not None else None
