@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import sys
 from collections.abc import Callable
 from typing import NamedTuple
 
@@ -135,6 +136,9 @@ def train(
     eval_every: int | None = None,
     clip_grad: float | None = None,
     patience: int | None = None,
+    on_eval: Callable[[int, float], None] | None = None,
+    progress: bool = True,
+    bar_leave: bool = True,
 ) -> TrainHistory:
     """Train `model` on (x, y); return a TrainHistory.
 
@@ -153,7 +157,14 @@ def train(
     `patience` consecutive val evaluations without improvement, and the best
     weights (lowest val NLL) are restored into `model` before returning:
     early stopping + best-checkpoint restore. `history.best` then holds
-    (step, val NLL) of that checkpoint.
+    (step, val NLL) of that checkpoint. `on_eval`, when given, is called with
+    (step, val NLL) after every validation evaluation — a hook for external
+    consumers such as an Optuna pruner, which may raise (e.g. TrialPruned) to
+    abort the run early; the exception propagates out of `train`. With
+    `progress=False` the tqdm bar is disabled; `bar_leave=False` erases the
+    bar when training ends instead of leaving it printed (useful when a
+    global progress bar runs above it: each run's train bar then overwrites
+    the previous one instead of scrolling).
     """
     gen = torch.Generator().manual_seed(seed) if seed is not None else None
     model.train()  # minibatch statistics for any BatchNorm (no-op otherwise)
@@ -164,11 +175,20 @@ def train(
     best: tuple[int, float] | None = None
     best_state: dict[str, torch.Tensor] | None = None
     bad_evals = 0
-    for step in tqdm(range(steps), desc="train", unit="step"):
+    for step in tqdm(
+        range(steps),
+        desc="train",
+        unit="step",
+        # bar only on a real terminal: frames would pile up in a redirected log
+        disable=not (progress and sys.stderr.isatty()),
+        leave=bar_leave,
+    ):
         if batch_size is None:
             loss = model.loss(x, y)
         else:
-            ix = torch.randint(0, x.shape[0], (batch_size,), generator=gen)
+            # indices are drawn on CPU (generator lives there) but must sit on
+            # the same device as x for the indexing to work (MPS/CUDA)
+            ix = torch.randint(0, x.shape[0], (batch_size,), generator=gen).to(x.device)
             loss = model.loss(x[ix], y[ix])
         opt.zero_grad()
         loss.backward()
@@ -186,6 +206,8 @@ def train(
         ):
             val_nll = model.nll(x_val, y_val)
             val.append((step, val_nll))
+            if on_eval is not None:
+                on_eval(step, val_nll)  # may raise (e.g. optuna.TrialPruned)
             if best is None or val_nll < best[1]:
                 best = (step, val_nll)
                 best_state = copy.deepcopy(model.state_dict())
@@ -193,7 +215,7 @@ def train(
             else:
                 bad_evals += 1
                 if patience is not None and bad_evals >= patience:
-                    logger.info(
+                    logger.debug(
                         "early stopping at step %d (best val NLL %.4f at step %d)",
                         step,
                         best[1],
