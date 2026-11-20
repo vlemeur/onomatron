@@ -22,6 +22,10 @@ format:
 type-check:
     uv run --locked ty check
 
+# Run the test suite (local, no network)
+test:
+    uv run --locked pytest
+
 # Run all Git hooks
 check:
     uv run --locked prek run --all-files

@@ -40,10 +40,14 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 [tool.ty.src]
 include = ["onomatron", "tests"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "jupyter>=1.1.1",
     "prek>=0.5.10",
+    "pytest>=9.2.0",
     "ruff>=0.17.3",
     "streamlit>=1.40.0",
     "ty>=0.0.97",
