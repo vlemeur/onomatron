@@ -13,10 +13,10 @@ from typing import Any
 import optuna
 import plotly.graph_objects as go
 import torch
-from tqdm import tqdm
 
 from onomatron.benchmark.config import BenchmarkConfig
 from onomatron.benchmark.dataset import build_model, load_benchmark_data
+from onomatron.benchmark.progress import BenchProgress
 from onomatron.benchmark.spaces import default_params
 from onomatron.benchmark.tracking import (
     RunLogger,
@@ -38,19 +38,36 @@ def run_evaluation(
     models: list[str],
     cfg: BenchmarkConfig,
     params_map: dict[str, dict[str, Any]] | None = None,
+    progress: BenchProgress | None = None,
 ) -> dict[str, dict[str, float]]:
     """Evaluate every model in `models`; return {model: key metrics}.
 
     Params resolution order: explicit `params_map` (from a tuning run) >
     best params of the persisted Optuna study > constructor defaults.
+    Progress goes to `progress` if given, else a local single bar is created.
     """
     init_mlflow(cfg)
     device = get_device(cfg.device)
     logger.info("evaluating %d models on device=%s", len(models), device)
+    if progress is None:
+        with BenchProgress(len(models), desc="eval") as progress:
+            return _eval_all(models, cfg, device, params_map, progress)
+    return _eval_all(models, cfg, device, params_map, progress)
+
+
+def _eval_all(
+    models: list[str],
+    cfg: BenchmarkConfig,
+    device: torch.device,
+    params_map: dict[str, dict[str, Any]] | None,
+    progress: BenchProgress,
+) -> dict[str, dict[str, float]]:
     results: dict[str, dict[str, float]] = {}
-    for model in tqdm(models, desc="eval models", unit="model"):
+    for model in models:
+        progress.start_model(model, 1, cfg.final_steps)
         params = _resolve_params(model, cfg, params_map)
-        results[model] = _evaluate_model(model, cfg, device, params)
+        results[model] = _evaluate_model(model, cfg, device, params, progress)
+        progress.trial_done()
     return results
 
 
@@ -64,8 +81,10 @@ def _resolve_params(
     try:
         study = optuna.load_study(study_name=model, storage=cfg.optuna_storage)
         return dict(study.best_params)
-    except KeyError:
-        logger.info("no optuna study for %s, using constructor defaults", model)
+    except KeyError, ValueError, RuntimeError:
+        # KeyError: no such study; ValueError/RuntimeError: study exists but has
+        # no COMPLETE trial (all pruned) — best_params would raise.
+        logger.info("no usable optuna study for %s, using constructor defaults", model)
         return default_params(model)
 
 
@@ -74,6 +93,7 @@ def _evaluate_model(
     cfg: BenchmarkConfig,
     device: torch.device,
     params: dict[str, Any],
+    progress: BenchProgress,
 ) -> dict[str, float]:
     seed = cfg.seed
     with RunLogger(
@@ -143,6 +163,9 @@ def _evaluate_model(
                 clip_grad=params["clip_grad"],
                 patience=cfg.patience,
                 seed=seed,
+                on_eval=lambda step, _v: progress.set_step(step),
+                progress=True,  # per-model train bar, erased at run end
+                bar_leave=False,
             )
 
         t0 = time.perf_counter()  # reset: wall time covers the training loop only

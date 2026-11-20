@@ -13,11 +13,23 @@ data/benchmark/mlflow.db (+ artifacts/); inspect with `mlflow ui`.
 
 import argparse
 import logging
+import sys
+
+import optuna
+from tqdm import tqdm
 
 from onomatron.benchmark import MODELS, run
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
+
+
+class TqdmLogHandler(logging.StreamHandler):
+    """Route log records through tqdm.write: messages are printed ABOVE the
+    active progress bars (which are redrawn right after), instead of
+    interleaving with bar frames and making the terminal scroll."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        tqdm.write(self.format(record), file=sys.stderr)
 
 
 def main() -> None:
@@ -38,7 +50,25 @@ def main() -> None:
     )
     parser.add_argument("--device", default=None, help="auto | cpu | mps | cuda")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="keep per-step train bars and the data-loading INFO logs",
+    )
     args = parser.parse_args()
+
+    handler = TqdmLogHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+    logging.root.handlers = [handler]
+    logging.root.setLevel(logging.INFO)
+
+    if not args.verbose:
+        # Quiet the noisy per-trial logs: Optuna's own chatter, MLflow's
+        # store messages, and the data/model INFO lines (they stay visible
+        # with --verbose). The onomatron.benchmark milestone logs stay INFO.
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        for name in ("onomatron.data", "onomatron.models", "mlflow"):
+            logging.getLogger(name).setLevel(logging.WARNING)
 
     overrides = {
         key: value
@@ -48,6 +78,7 @@ def main() -> None:
             "final_steps": args.final_steps,
             "device": args.device,
             "seed": args.seed,
+            "verbose": args.verbose,
         }.items()
         if value is not None
     }

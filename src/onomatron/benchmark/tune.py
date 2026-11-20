@@ -14,11 +14,11 @@ from typing import Any
 
 import optuna
 import torch
-from tqdm import tqdm
 
 from onomatron.benchmark.config import BenchmarkConfig
 from onomatron.benchmark.dataset import build_model, load_benchmark_data
-from onomatron.benchmark.spaces import search_space
+from onomatron.benchmark.progress import BenchProgress
+from onomatron.benchmark.spaces import default_params, search_space
 from onomatron.benchmark.tracking import (
     RunLogger,
     get_device,
@@ -35,8 +35,13 @@ logger = logging.getLogger(__name__)
 TUNING_EXPERIMENT = "onomatron-tuning"
 
 
-def run_tuning(models: list[str], cfg: BenchmarkConfig) -> dict[str, dict[str, Any]]:
-    """Tune every model in `models`; return {model: best_params}."""
+def run_tuning(
+    models: list[str], cfg: BenchmarkConfig, progress: BenchProgress | None = None
+) -> dict[str, dict[str, Any]]:
+    """Tune every model in `models`; return {model: best_params}.
+
+    Progress goes to `progress` if given, else a local single bar is created.
+    """
     init_mlflow(cfg)
     device = get_device(cfg.device)
     logger.info(
@@ -45,14 +50,30 @@ def run_tuning(models: list[str], cfg: BenchmarkConfig) -> dict[str, dict[str, A
         device,
         cfg.n_trials,
     )
+    if progress is None:
+        with BenchProgress(len(models) * cfg.n_trials) as progress:
+            return _tune_all(models, cfg, device, progress)
+    return _tune_all(models, cfg, device, progress)
+
+
+def _tune_all(
+    models: list[str],
+    cfg: BenchmarkConfig,
+    device: torch.device,
+    progress: BenchProgress,
+) -> dict[str, dict[str, Any]]:
     results: dict[str, dict[str, Any]] = {}
-    for model in tqdm(models, desc="models", unit="model"):
-        results[model] = _tune_model(model, cfg, device)
+    for model in models:
+        progress.start_model(model, cfg.n_trials, cfg.steps)
+        results[model] = _tune_model(model, cfg, device, progress)
     return results
 
 
 def _tune_model(
-    model: str, cfg: BenchmarkConfig, device: torch.device
+    model: str,
+    cfg: BenchmarkConfig,
+    device: torch.device,
+    progress: BenchProgress,
 ) -> dict[str, Any]:
     """Run (or resume) the Optuna study for one model; return its best params."""
     study = optuna.create_study(
@@ -102,14 +123,14 @@ def _tune_model(
                 run.metric("val_nll", val_nll)
                 run.metric("n_parameters", 0)
                 run.metric("model_size_mb", model_size_mb(net))
-                logger.info(
+                logger.debug(
                     "ngram trial %d: n=%d smoothing=%.3g -> val_nll=%.4f",
                     trial.number,
                     params["n"],
                     params["smoothing"],
                     val_nll,
                 )
-                result = val_nll
+                return val_nll  # no training loop: nothing to prune, exit now
 
             run.metric("n_parameters", n_parameters(net))
             opt = torch.optim.AdamW(
@@ -125,6 +146,8 @@ def _tune_model(
                 gets its TrialPruned."""
                 trial.report(val_nll, step)
                 run.metric("val_nll", val_nll, step=step)
+                best = best_so_far[0] if best_so_far[0] < inf else None
+                progress.set_step(step, best)
                 if trial.should_prune():
                     raise optuna.TrialPruned()
 
@@ -144,6 +167,8 @@ def _tune_model(
                         patience=cfg.patience,
                         seed=seed,
                         on_eval=on_eval,
+                        progress=True,  # per-trial train bar, erased at trial end
+                        bar_leave=False,
                     )
                 except optuna.TrialPruned:
                     return None  # pruned mid-training
@@ -154,7 +179,7 @@ def _tune_model(
 
             if history is None:
                 run.tag("status", "pruned")
-                logger.info("%s trial %d: pruned by ASHA", model, trial.number)
+                logger.debug("%s trial %d: pruned by ASHA", model, trial.number)
             else:
                 run.tag("status", "complete")
                 for i in range(0, len(history.train_losses), cfg.eval_every):
@@ -170,7 +195,7 @@ def _tune_model(
                 if history.best[1] < best_so_far[0]:
                     best_so_far[0] = history.best[1]
                     _log_model_artifacts(run, model, trial.number, net, seed)
-                logger.info(
+                logger.debug(
                     "%s trial %d: best val_nll=%.4f at step %d (%.1fs, peak %.1f MB)",
                     model,
                     trial.number,
@@ -185,19 +210,24 @@ def _tune_model(
             raise optuna.TrialPruned()  # after the run closed cleanly
         return result
 
-    # One progress bar per study: the callback fires after every trial
-    # (complete or pruned), the inner train() bar shows the steps of the
-    # running trial.
-    trials_bar = tqdm(total=cfg.n_trials, desc=f"trials {model}", unit="trial")
-
     def on_trial_done(study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
-        state = trial.state.name.lower()
-        best = f"{study.best_value:.4f}" if study.best_value is not None else "—"
-        trials_bar.set_postfix_str(f"last={state}, best val_nll={best}")
-        trials_bar.update(1)
+        """Advance the global bar after every trial (complete or pruned)."""
+        complete = [
+            t.value for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+        ]
+        progress.trial_done(float(min(complete)) if complete else None)
 
     study.optimize(objective, n_trials=cfg.n_trials, callbacks=[on_trial_done])
-    trials_bar.close()
+    complete = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+    if not complete:
+        # e.g. --trials 1 with the single trial pruned by ASHA: best_value /
+        # best_params would raise — fall back to constructor defaults.
+        logger.warning(
+            "study %s: %d trials, none complete — using constructor defaults",
+            model,
+            len(study.trials),
+        )
+        return default_params(model)
     logger.info(
         "study %s: %d trials, best val_nll=%.4f, params=%s",
         model,

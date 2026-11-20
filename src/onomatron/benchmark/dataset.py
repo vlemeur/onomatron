@@ -117,7 +117,7 @@ def load_benchmark_data(
     data.x_train, data.y_train = make(names_train)
     data.x_val, data.y_val = make(names_val)
     data.x_test, data.y_test = make(names_test)
-    logger.info(
+    logger.debug(
         "benchmark data for %s: train %s, val %s, test %s (device=%s)",
         model,
         data.x_train.shape,

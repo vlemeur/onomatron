@@ -46,6 +46,7 @@ class BenchmarkConfig(BaseModel):
     # Reproducibility / hardware
     seed: int = 42
     device: str = "auto"  # auto | cpu | mps | cuda
+    verbose: bool = False  # True: keep the data/model INFO logs (bars always on)
     # Shared training search space (AdamW itself is fixed, not suggested)
     batch_sizes: tuple[int, ...] = (64, 128, 256)
     lr_low: float = 1e-4
