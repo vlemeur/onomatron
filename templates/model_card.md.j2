@@ -1,0 +1,118 @@
+# {{ model_repo }}
+
+A character-level language model that generates **names of characters from
+French literature** — from-scratch, in the spirit of Karpathy's
+[makemore](https://github.com/karpathy/makemore). This repo holds the
+**{{ run.model }}** model, one of the top performers of the onomatron benchmark
+(all 11 architectures compared below).
+
+## Model description
+
+| | |
+|---|---|
+| architecture | `{{ run.model }}` (`{{ cls_name }}`) |
+| parameters | {{ n_params }} |
+| size | {{ f(run.metrics.get("model_size_mb"), 2) }} MB |
+| vocab | {{ vocab_size }} chars + `.` sentinel |
+| bundle | `config.json` + `model.pt` |
+
+Architecture + training hyperparameters (best of the Optuna study):
+
+{{ params_table }}
+
+## Intended use
+
+Generate fictional first names in the style of French literature characters:
+
+```python
+from onomatron.serialize import load_bundle_from_hub
+
+net, config = load_bundle_from_hub("{{ model_repo }}")
+print(net.sample(n=20, seed=42))
+```
+
+or from the command line, from this repo's root:
+
+```bash
+python generate.py --bundle . --n 20 --seed 42
+```
+
+### Out-of-scope use
+
+Not a model of language in general: no semantics, no grammar beyond character
+statistics, French literary names only. Do not use it to name real persons or
+for any decision about individuals.
+
+## Training data
+
+[{{ dataset_repo }}](https://huggingface.co/datasets/{{ dataset_repo }}) — one
+sanitized name per line (see its card for full provenance and per-source
+licenses).
+
+## Training procedure
+
+1. Hyperparameter tuning with **Optuna** (TPE sampler + ASHA pruning,
+   objective = val NLL, persistent SQLite studies); every trial tracked in
+   **MLflow**.
+2. Final retraining for `final_steps` = {{ run.params.get("final_steps") }} steps
+   with the best params: AdamW (lr = `{{ run.params.get("lr") }}`,
+   weight_decay = `{{ run.params.get("weight_decay") }}`,
+   clip_grad = `{{ run.params.get("clip_grad") }}`,
+   batch_size = {{ run.params.get("batch_size") }}), seed = {{ seed }},
+   device = {{ device }}, early stopping (patience = {{ run.params.get("patience") }}).
+
+## Evaluation
+
+Protocol: names are split **by name** (never by n-gram, to avoid leakage
+between correlated n-grams of the same name) into train/val/test = 80/10/10
+with a fixed seed; the test split is touched exactly once, in the final
+evaluation. Inference speed is measured on CPU.
+
+Full benchmark (all architectures, ranked by val NLL):
+
+{{ results_md }}
+
+This model: val NLL = **{{ f(run.metrics.get("val_nll")) }}**, test NLL =
+**{{ f(run.metrics.get("test_nll")) }}**, {{ run.metrics.get("inference_names_per_sec", 0) | int }}
+names/s on CPU, training wall time {{ f(run.metrics.get("train_wall_time_s"), 1) }} s.
+
+## Sample generations (seed {{ seed }})
+
+```
+{{ samples_block }}
+```
+
+## Limitations
+
+- Small training set (a few thousand names), char-level: the model can
+  reproduce training names verbatim and may produce names that coincide with
+  real people — they are fictional by construction, treat them as such.
+- Biased towards French literature; accents are kept, everything else is
+  dropped at normalization time.
+- {% include "_obtic.md.j2" %}
+- Local `data/external/*.txt` inputs are gitignored and declare no license;
+  the derived names are facts, but their selection is not ours — see the
+  dataset card.
+
+## Environmental impact
+
+Training wall time {{ f(run.metrics.get("train_wall_time_s"), 1) }} s on
+`{{ device }}` (peak {{ f(run.metrics.get("train_peak_mem_mb"), 0) }} MB); inference
+measured on CPU. Full per-run numbers and the MLflow database:
+[onomatron-benchmark](https://huggingface.co/{{ benchmark_repo }}).
+
+## Files
+
+- `model.pt` — weights (`state_dict`, or counts for the ngram model)
+- `config.json` — model name, class, architecture params, seed, vocab, metrics
+- `onomatron/` — vendored torch-only subset of the package (loader included)
+- `generate.py` — standalone sampling CLI
+
+## Citation
+
+{% include "_biblio.md.j2" %}
+## License
+
+MIT for the code and the weights. The training data is published under
+`license: other` with per-source attribution — see the
+[dataset card](https://huggingface.co/datasets/{{ dataset_repo }}).
