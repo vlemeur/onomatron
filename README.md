@@ -35,6 +35,36 @@ MLflow under `data/benchmark/`.
 
 A local generation UI (Streamlit) is in `scripts/app_streamlit.py`.
 
+## Results
+
+Final evaluation on the held-out **test** split (touched exactly once), after
+Optuna tuning (TPE + ASHA pruning) of each architecture. Mean ± std over 2
+seeds (1 seed for rwkv and mamba); hardware: Apple Silicon (MPS). Full runs,
+hyperparameters and curves are tracked in MLflow under `data/benchmark/`
+(`just bench-ui`).
+
+| model | test NLL | params | size | train time | inference |
+|---|---:|---:|---:|---:|---:|
+| rwkv | **2.345** | 121k | 0.48 MB | 37 s | 1 085 names/s |
+| rnn | 2.349 | 7.7k | 0.03 MB | 53 s | 4 962 names/s |
+| wavenet | 2.356 ± 0.010 | 51k | 0.20 MB | 16 s | 1 451 names/s |
+| mamba | 2.365 | 56k | 0.22 MB | 717 s | 87 names/s |
+| lstm | 2.368 ± 0.004 | 10k | 0.04 MB | 7 s | 3 791 names/s |
+| mlp | 2.368 | 39k | 0.16 MB | 12 s | 7 711 names/s |
+| transformer | 2.376 | 805k | 3.22 MB | 65 s | 219 names/s |
+| gru | 2.381 ± 0.028 | 21k | 0.08 MB | 23 s | 3 667 names/s |
+| dilated_wavenet | 2.433 ± 0.008 | 13k | 0.05 MB | 35 s | 441 names/s |
+| ngram | 2.463 ± 0.000 | — (count table) | 0.44 MB | < 1 s | 19 094 names/s |
+| linear | 2.593 | 1 444 | 0.01 MB | 4 s | 7 367 names/s |
+
+RWKV edges out the vanilla RNN on test NLL (2.345 vs 2.349) but at 16× the
+parameters and ~4.6× slower generation — for a name generator, the RNN is the
+practical sweet spot. Every neural model beats the count-based baselines
+(ngram 2.463, linear 2.593) by 0.1–0.25 nats. Mamba is the outlier:
+competitive test NLL (2.365) but 12 minutes of training and 87 names/s. The
+transformer is mid-pack despite 805k parameters (10× the next model) and the
+second-slowest inference.
+
 ## Dataset
 
 `data/processed/names.txt` — one sanitized name per line (~5.9k names). The ObTIC
@@ -46,7 +76,7 @@ DH 2025 (ObTIC, Sorbonne Université).
 Code and model weights: [MIT](LICENSE). The dataset carries per-source licenses
 (Wikipedia CC BY-SA 4.0, Wikidata CC0, ObTIC without declared license) — see the
 provenance card of the published `onomatron-names` dataset repo on the Hub
-(`Jig09/onomatron-names`; models under `Jig09/onomatron-<model>`).
+(`vlemeur/onomatron-names`; models under `vlemeur/onomatron-<model>`).
 
 ## Citation
 
