@@ -7,6 +7,26 @@ literature, from the classics to the modern era — from scratch, in the spirit 
 Karpathy's [makemore](https://github.com/karpathy/makemore) and his
 [Zero to Hero](https://github.com/karpathy/nn-zero-to-hero) series.
 
+👉 **[Live demo](https://vlemeur.github.io/onomatron/)** — generate character names
+right in your browser: serverless (ONNX + onnxruntime-web), no install. Type a
+prefix, then **Next char** (char-by-char) or **Generate** (N names at once).
+
+![web demo](demo/screenshot.png)
+
+## Usage
+
+```bash
+uv sync --locked
+just scrape          # build the dataset (network)
+just bench           # tune + evaluate all models
+just bench-ui        # MLflow UI on http://127.0.0.1:5000
+just run             # local UI on the best published model (fetched from the Hub)
+just export-onnx     # export the best model to demo/model.onnx (ONNX, export extra)
+just demo            # serve demo/ locally on http://localhost:8000
+```
+
+The local UI behind `just run` is Streamlit (`scripts/app_streamlit.py`).
+
 ## Layout
 
 - `notebooks/` — the makemore journey, one notebook per architecture
@@ -23,38 +43,18 @@ Karpathy's [makemore](https://github.com/karpathy/makemore) and his
 - `demo/` — serverless web demo on the ONNX export of the best model, published
   to GitHub Pages
 
-## Usage
-
-```bash
-uv sync --locked
-just scrape          # build the dataset (network)
-just bench           # tune + evaluate all models
-just bench-ui        # MLflow UI on http://127.0.0.1:5000
-just run             # local UI on the best published model (fetched from the Hub)
-just export-onnx     # export the best model to demo/model.onnx (ONNX, export extra)
-just demo            # serve demo/ locally on http://localhost:8000
-```
-
-## Web demo
-
-Serverless browser demo in `demo/` (vanilla JS + onnxruntime-web CDN, model
-exported to ONNX): <https://vlemeur.github.io/onomatron/> — prefix, then
-**Next char** (char-by-char) or **Generate** (N names at once). Regenerate the
-artefacts with `just export-onnx`; deployed by `.github/workflows/pages.yml`.
-
-Names are split **by name** (seed 42) into train/val/test = 80/10/10; the test
-split is touched exactly once, in the final evaluation. Everything is tracked in
-MLflow under `data/benchmark/`.
-
-A local generation UI (Streamlit) is in `scripts/app_streamlit.py`.
-
 ## Results
 
-Final evaluation on the held-out **test** split (touched exactly once), after
-Optuna tuning (TPE + ASHA pruning) of each architecture. Mean ± std over 2
-seeds (1 seed for rwkv and mamba); hardware: Apple Silicon (MPS). Full runs,
-hyperparameters and curves are tracked in MLflow under `data/benchmark/`
-(`just bench-ui`).
+Final evaluation on the held-out **test** split — names are split **by name**
+(seed 42) into train/val/test = 80/10/10, and the test split is touched exactly
+once, here.
+
+Scores are mean ± std over 2 seeds (1 seed for rwkv and mamba), after
+Optuna tuning (TPE + ASHA pruning) of each architecture; hardware: Apple Silicon
+(MPS).
+
+Full runs, hyperparameters and curves are tracked in MLflow under
+`data/benchmark/` (`just bench-ui`).
 
 | model | test NLL | params | size | train time | inference |
 |---|---:|---:|---:|---:|---:|
@@ -77,6 +77,14 @@ practical sweet spot. Every neural model beats the count-based baselines
 competitive test NLL (2.365) but 12 minutes of training and 87 names/s. The
 transformer is mid-pack despite 805k parameters (10× the next model) and the
 second-slowest inference.
+
+## Web demo (deployment)
+
+The demo in `demo/` (vanilla JS + onnxruntime-web from CDN, model exported to
+ONNX) is published to GitHub Pages: <https://vlemeur.github.io/onomatron/>.
+Regenerate the artefacts (`demo/model.onnx`, `demo/vocab.json`) with
+`just export-onnx`; deployment is automatic via `.github/workflows/pages.yml`;
+serve it locally with `just demo`.
 
 ## Dataset
 
