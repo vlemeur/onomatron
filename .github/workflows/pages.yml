@@ -1,0 +1,65 @@
+name: Deploy demo to GitHub Pages
+
+# Publishes the static demo/ directory (index.html + app.js + model.onnx +
+# vocab.json) to GitHub Pages with the official "GitHub Actions" source
+# (Settings -> Pages -> Source: GitHub Actions, already selected in the repo
+# settings): no gh-pages branch involved — the build job uploads demo/ as a
+# Pages artifact, the deploy job publishes it. Site URL:
+# https://<owner>.github.io/onomatron/
+#
+# The existing ci.yml is untouched.
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - "demo/**"
+      - "scripts/export_onnx.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read # checkout
+  pages: write # publish the Pages artifact
+  id-token: write # OIDC token for the github-pages environment
+
+concurrency:
+  group: pages
+  cancel-in-progress: false # never cancel a Pages deployment in progress
+
+jobs:
+  build:
+    name: build demo site artifact
+    # Same pinned runner image as ci.yml (see the comment there).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      # The committed artefact must stay light: refuse to publish a
+      # model.onnx of 10 MiB or more (same budget as scripts/export_onnx.py).
+      - name: Check model.onnx size budget
+        run: |
+          size=$(stat -c%s demo/model.onnx)
+          echo "demo/model.onnx = $size bytes"
+          if [ "$size" -ge 10485760 ]; then
+            echo "model.onnx is >= 10 MiB — re-export a smaller model first" >&2
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./demo
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
