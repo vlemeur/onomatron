@@ -38,7 +38,8 @@ just demo            # serve demo/ locally on http://localhost:8000
 ## Web demo
 
 Serverless browser demo in `demo/` (vanilla JS + onnxruntime-web CDN, model
-exported to ONNX): <https://vlemeur.github.io/onomatron/>. Regenerate the
+exported to ONNX): <https://vlemeur.github.io/onomatron/> — prefix, then
+**Next char** (char-by-char) or **Generate** (N names at once). Regenerate the
 artefacts with `just export-onnx`; deployed by `.github/workflows/pages.yml`.
 
 Names are split **by name** (seed 42) into train/val/test = 80/10/10; the test

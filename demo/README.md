@@ -11,9 +11,10 @@ loaded from a CDN. No framework, no build step, no `node_modules`.
 - `vocab.json` — sentinel + char↔index mapping + model dims + metrics, written
   by the export script
 
-Type a prefix, click **Next char**: the model completes the name one
-character per click (sampling from `softmax(logits / temperature)`), until
-the end-of-name sentinel is drawn.
+Type a prefix, then either click **Next char** to complete one name character
+by character, or set a count and click **Generate names** to sample that many
+full names at once (the prefix applies to both modes). Sampling draws from
+`softmax(logits / temperature)` until the end-of-name sentinel is drawn.
 
 ## Regenerate the artefacts
 
