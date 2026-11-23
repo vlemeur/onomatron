@@ -23,6 +23,13 @@ dependencies = [
     "tqdm>=4.70.1",
 ]
 
+[project.optional-dependencies]
+# ONNX export of a trained model for the browser demo (scripts/export_onnx.py,
+# demo/). Not installed by default: `uv sync --locked` (CI) skips extras.
+export = [
+    "onnx>=1.18",
+]
+
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"

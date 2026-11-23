@@ -20,6 +20,8 @@ Karpathy's [makemore](https://github.com/karpathy/makemore) and his
   every trial and of the final evaluation
 - `src/onomatron/publish/` — export/push of the dataset, the top models and the
   benchmark results to the Hugging Face Hub (`scripts/publish_hf.py`)
+- `demo/` — serverless web demo on the ONNX export of the best model, published
+  to GitHub Pages
 
 ## Usage
 
@@ -29,7 +31,15 @@ just scrape          # build the dataset (network)
 just bench           # tune + evaluate all models
 just bench-ui        # MLflow UI on http://127.0.0.1:5000
 just run             # local UI on the best published model (fetched from the Hub)
+just export-onnx     # export the best model to demo/model.onnx (ONNX, export extra)
+just demo            # serve demo/ locally on http://localhost:8000
 ```
+
+## Web demo
+
+Serverless browser demo in `demo/` (vanilla JS + onnxruntime-web CDN, model
+exported to ONNX): <https://vlemeur.github.io/onomatron/>. Regenerate the
+artefacts with `just export-onnx`; deployed by `.github/workflows/pages.yml`.
 
 Names are split **by name** (seed 42) into train/val/test = 80/10/10; the test
 split is touched exactly once, in the final evaluation. Everything is tracked in

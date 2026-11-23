@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>onomatron — character name generator</title>
+    <meta
+      name="description"
+      content="Character-level RNN trained on French literature character names, running fully in your browser (ONNX Runtime Web). No server."
+    />
+    <link rel="stylesheet" href="style.css" />
+    <!-- onnxruntime-web, pinned, from the jsDelivr CDN (no build step) -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.min.js"></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>onomatron</h1>
+      <p class="tagline">
+        A character-level RNN generating names of characters from French
+        literature — running entirely in your browser via ONNX Runtime Web.
+        No server, no tracking.
+      </p>
+
+      <div class="controls">
+        <input
+          id="prefix"
+          type="text"
+          placeholder="prefix (optional), e.g. “val”"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="next" type="button" disabled>Next char</button>
+        <button id="reset" type="button" disabled>New name</button>
+        <label class="temp">
+          temperature
+          <input id="temp" type="range" min="0.1" max="2" step="0.05" value="1" />
+          <span id="temp-val">1.00</span>
+        </label>
+      </div>
+
+      <p id="name" class="name" aria-live="polite">&nbsp;</p>
+      <p id="status" class="status">loading model…</p>
+
+      <footer>
+        model: <span id="model-info">…</span> ·
+        <a href="https://github.com/vlemeur/onomatron">source</a> ·
+        weights MIT, dataset provenance on the repo README
+      </footer>
+    </main>
+  </body>
+</html>

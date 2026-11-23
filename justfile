@@ -58,3 +58,13 @@ bench-ui:
 # Local Streamlit UI on the best published model (fetched from the Hub at launch)
 run:
     uv run --locked streamlit run scripts/app_streamlit.py
+
+# Export the best model to ONNX for the web demo (writes demo/model.onnx + demo/vocab.json);
+# needs the "export" extra. Extra args are forwarded, e.g.:
+#   just export-onnx --model wavenet --out demo/
+export-onnx *args:
+    uv run --locked --extra export python scripts/export_onnx.py {{args}}
+
+# Serve the web demo locally (http://localhost:8000)
+demo:
+    uv run --locked python -m http.server 8000 --directory demo
